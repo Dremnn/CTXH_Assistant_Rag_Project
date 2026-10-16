@@ -3,4 +3,7 @@ from src.retrieval.vector_store import VectorStore, cosine_similarity, normalize
 
 __all__ = [
     "EmbeddingGenerator",
+    "VectorStore",
+    "cosine_similarity",
+    "normalize_scores",
 ]
