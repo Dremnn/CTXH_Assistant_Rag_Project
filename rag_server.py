@@ -25,6 +25,7 @@ from openpyxl import load_workbook
 from src.loaders import DocumentLoaderFactory, SUPPORTED_EXTENSIONS
 from src.chunking import RecursiveChunker
 from src.retrieval import VectorStore, EmbeddingGenerator
+from src.models import StudentCTXHRecord, CTXHRegistration
 
 load_dotenv()
 
@@ -33,6 +34,17 @@ mcp = MCPServer("rag-knowledge-server")
 
 DATA_DIR = _HERE / "data"
 INDEX_PATH = DATA_DIR / "index.json"
+STUDENTS_DB_PATH = DATA_DIR / "students.json"
+
+# Ho tro ca student_activities.json va student_ctxh.json
+STUDENT_ACTIVITIES_PATHS = [
+    DATA_DIR / "student_activities.json",
+]
+
+# Ho tro ca students.xlsx va students_ctxh.xlsx
+EXCEL_STUDENTS_PATHS = [
+    DATA_DIR / "students.xlsx",
+]
 
 # Ho tro ca activities.json va ctxh.json
 ACTIVITIES_RULES_PATHS = [
@@ -49,6 +61,17 @@ CTXH_STUDENT_ACTIVITY_FILENAMES = [
 # Global Store
 STORE = VectorStore()
 
+def _get_student_activities_path() -> Path:
+    for p in STUDENT_ACTIVITIES_PATHS:
+        if p.exists():
+            return p
+    return STUDENT_ACTIVITIES_PATHS[0]
+
+def _get_excel_students_path() -> Path | None:
+    for p in EXCEL_STUDENTS_PATHS:
+        if p.exists():
+            return p
+    return None
 
 def _get_activities_rules_path() -> Path:
     for p in ACTIVITIES_RULES_PATHS:
@@ -185,7 +208,154 @@ def _extract_rules_from_text(text: str, rules_dict: dict) -> None:
             clean = line.strip().lstrip("-*•✓ ").strip()
             if len(clean) > 15 and clean not in rules_dict.setdefault("exclusions", []):
                 rules_dict["exclusions"].append(clean)
+                
+                
+def _load_student_ctxh() -> list[dict]:
+    path = _get_student_activities_path()
+    if not path.exists():
+        for alt in STUDENT_ACTIVITIES_PATHS:
+            if alt.exists():
+                path = alt
+                break
+        else:
+            return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []                
+                
+def sync_students_from_excel() -> dict:
+    """
+    Doc file Excel (students.xlsx hoac students_ctxh.xlsx) va dong bo vao students.json.
+    DONG THOI bao toan 100% lich su hoat dong da co trong student_activities.json.
+    TUYET DOI KHONG reset hoat dong cua sinh vien khi chay lai client.
+    """
+    excel_path = _get_excel_students_path()
+    if excel_path is None:
+        STUDENTS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(STUDENTS_DB_PATH, "w", encoding="utf-8") as f:
+            json.dump([], f, ensure_ascii=False, indent=2)
+        msg = "Khong tim thay file Excel sinh vien (students.xlsx) trong data/."
+        print(f"[sync_students] {msg}", file=sys.stderr)
+        return {
+            "status": "removed",
+            "message": msg,
+        }
 
+    try:
+        wb = load_workbook(str(excel_path), data_only=True)
+        sheet_name = "students" if "students" in wb.sheetnames else wb.sheetnames[0]
+        ws = wb[sheet_name]
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+    except Exception as e:
+        msg = f"Loi khi doc file Excel: {e}"
+        print(f"[sync_students] {msg}", file=sys.stderr)
+        return {"status": "error", "message": msg}
+
+    if not rows or len(rows) < 2:
+        msg = "File Excel khong co du lieu."
+        print(f"[sync_students] {msg}", file=sys.stderr)
+        return {"status": "empty", "message": msg}
+
+    headers = [str(h).strip().lower() if h else f"col_{i}" for i, h in enumerate(rows[0])]
+    students = []
+
+    # Doc du lieu hoat dong hien co de BAO TOAN 100% LICH SU
+    existing_activities_records = _load_student_ctxh()
+    existing_by_mssv = {s.get("mssv"): s for s in existing_activities_records}
+
+    for r in rows[1:]:
+        if not any(r):
+            continue
+        row_dict = dict(zip(headers, r))
+
+        mssv = str(row_dict.get("mssv", "")).strip()
+        if mssv.endswith(".0"):
+            mssv = mssv[:-2]
+        if not mssv:
+            continue
+
+        student_name = str(row_dict.get("student_name", "")).strip()
+        faculty = str(row_dict.get("faculty", "")).strip()
+        course_year = str(row_dict.get("course_year", "2023")).strip()
+        if course_year.endswith(".0"):
+            course_year = course_year[:-2]
+
+        program_type = str(row_dict.get("program_type", "")).strip()
+
+        try:
+            training_years = float(row_dict.get("training_years") or 4.0)
+        except (ValueError, TypeError):
+            training_years = 4.0
+
+        try:
+            required_ctxh_days = float(row_dict.get("required_ctxh_days") or 4.0)
+        except (ValueError, TypeError):
+            required_ctxh_days = 4.0
+
+        email = str(row_dict.get("email", "")).strip()
+        status = str(row_dict.get("status", "Đang học")).strip()
+
+        student_entry = {
+            "mssv": mssv,
+            "student_name": student_name,
+            "faculty": faculty,
+            "course_year": course_year,
+            "program_type": program_type,
+            "training_years": training_years,
+            "required_ctxh_days": required_ctxh_days,
+            "email": email,
+            "status": status,
+        }
+        students.append(student_entry)
+
+        # Neu sinh vien da co ho so -> BAO TOAN 100% LICH SU HOAT DONG, chi cap nhat thong tin co ban!
+        if mssv in existing_by_mssv:
+            rec = existing_by_mssv[mssv]
+            rec["student_name"] = student_name
+            rec["faculty"] = faculty
+            rec["course_year"] = course_year
+            rec["required_days"] = required_ctxh_days
+            # registered_activities va accumulated_days DUOC GIU NGUYEN HOAN TOAN
+        else:
+            existing_by_mssv[mssv] = {
+                "mssv": mssv,
+                "student_name": student_name,
+                "faculty": faculty,
+                "course_year": course_year,
+                "required_days": required_ctxh_days,
+                "accumulated_days": 0.0,
+                "registered_activities": [],
+            }
+
+    STUDENTS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(STUDENTS_DB_PATH, "w", encoding="utf-8") as f:
+        json.dump(students, f, ensure_ascii=False, indent=2)
+
+    _save_student_ctxh(list(existing_by_mssv.values()))
+
+    msg = f"Dong bo thanh cong {len(students)} sinh vien tu '{excel_path.name}' vao students.json."
+    print(f"[sync_students] {msg}", file=sys.stderr)
+
+    return {
+        "status": "success",
+        "total_students": len(students),
+        "file": str(excel_path.name),
+    }
+    
+def _save_student_ctxh(data: list[dict]) -> None:
+    if not data:
+        # Safety guard: never wipe file with empty list if the files already exist and have data
+        current_data = _load_student_ctxh()
+        if current_data:
+            sys.stderr.write("[Warning] Tu choi ghi de danh sach sinh vien rong [] len CSDL da co du lieu.\n")
+            return
+    for p in STUDENT_ACTIVITIES_PATHS:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
 def _find_all_ctxh_rules_files() -> list[Path]:
     """
@@ -425,6 +595,70 @@ def _parse_ctxh_rules_from_file(fpath: Path) -> dict:
         "activities": activities
     }
 
+def _normalize_ctxh_record_keys(raw_row: dict) -> dict:
+    """Chuan hoa ten cot tu tieng Viet hoac tieng Anh ve khoa chuan cua he thong."""
+    normalized = {}
+    for k, v in raw_row.items():
+        if v is None:
+            continue
+        key_clean = str(k).strip().lower().replace(" ", "_")
+        val = str(v).strip()
+        if not val or val.lower() == "none":
+            continue
+
+        # MSSV
+        if any(w in key_clean for w in ["mssv", "ma_sv", "masv", "ma_sinh_vien", "student_id", "msv"]):
+            if val.endswith(".0"):
+                val = val[:-2]
+            normalized["mssv"] = val
+        # Ma hoat dong
+        elif any(w in key_clean for w in ["ma_hoat_dong", "ma_hd", "mahd", "activity_code", "ma_so"]):
+            if val.endswith(".0"):
+                val = val[:-2]
+            normalized["activity_code"] = val
+        # Ten hoat dong
+        elif any(w in key_clean for w in ["ten_hoat_dong", "ten_hd", "tenhd", "hoat_dong", "activity_name", "activity", "noi_dung"]):
+            normalized["activity_name"] = val
+        # Diem
+        elif any(w in key_clean for w in ["diem", "points", "score"]):
+            normalized["points"] = val
+        # Ngay quy doi
+        elif any(w in key_clean for w in ["ngay_quy_doi", "so_ngay", "ngay_ctxh", "converted_days", "days"]):
+            normalized["converted_days"] = val
+        # Trang thai
+        elif any(w in key_clean for w in ["trang_thai", "tinh_trang", "status"]):
+            normalized["status"] = val
+        # Ngay dang ky / tham gia
+        elif any(w in key_clean for w in ["ngay_tham_gia", "ngay_dk", "ngay_dang_ky", "registration_date", "date", "thoi_gian"]):
+            normalized["registration_date"] = val
+        # Ma dang ky
+        elif any(w in key_clean for w in ["ma_dk", "reg_id", "registration_id"]):
+            normalized["reg_id"] = val
+        # Ghi chu
+        elif any(w in key_clean for w in ["ghi_chu", "note", "notes", "nhan_xet"]):
+            normalized["note"] = val
+        else:
+            normalized[key_clean] = val
+
+    # Fallback tu dong nhan dien cot theo gia tri neu header khong khop
+    if "mssv" not in normalized:
+        for v in raw_row.values():
+            s = str(v).strip()
+            if s.endswith(".0"):
+                s = s[:-2]
+            if re.match(r"^\d{7,10}$", s):
+                normalized["mssv"] = s
+                break
+    if "activity_code" not in normalized:
+        for v in raw_row.values():
+            s = str(v).strip()
+            if s.endswith(".0"):
+                s = s[:-2]
+            if re.match(r"^\d{6}$", s):
+                normalized["activity_code"] = s
+                break
+
+    return normalized
 
 def sync_ctxh_rules_from_file() -> dict:
     """
@@ -508,6 +742,165 @@ def sync_ctxh_rules_from_file() -> dict:
         "total_activities": len(activities_list),
         "target_file": "activities.json"
     }
+    
+    
+def _load_students() -> list[dict]:
+    if not STUDENTS_DB_PATH.exists():
+        return []
+    try:
+        with open(STUDENTS_DB_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+    
+    
+    
+def sync_ctxh_from_file() -> dict:
+    """
+    Tim kiem file Excel luu hoat dong da tham gia CTXH cua sinh vien trong data/.
+    Neu co file: Phan tich va nap bo sung vao student_activities.json.
+    Neu khong co file: Tra ve status="none" va TUYET DOI KHONG THAY DOI data/student_activities.json.
+    TUYET DOI BAO TOAN LICH SU HOAT DONG, khong bao gio reset ve rong.
+    """
+    source_file = _find_ctxh_source_file()
+
+    if source_file is None:
+        return {
+            "status": "none",
+            "message": "Khong co file Excel hoat dong da tham gia cua sinh vien. Lich su duoc bao toan nguyen ven.",
+        }
+
+    raw_rows = _parse_ctxh_rows_from_file(source_file)
+
+    if not raw_rows:
+        msg = f"File '{source_file.name}' khong co du lieu hoat dong moi. Lich su duoc giu nguyen."
+        sys.stderr.write(f"[sync_ctxh] {msg}\n")
+        return {"status": "kept", "message": msg}
+
+    # Nhom cac hoat dong theo mssv
+    activities_by_mssv: dict[str, list[dict]] = {}
+    for row in raw_rows:
+        mssv = str(row.get("mssv", "")).strip()
+        if mssv.endswith(".0"):
+            mssv = mssv[:-2]
+        if not mssv:
+            continue
+        activities_by_mssv.setdefault(mssv, []).append(row)
+
+    # Lay thong tin sinh vien goc de bo sung ten, khoa, khoa hoc
+    students_master = _load_students()
+    master_by_mssv = {s.get("mssv"): s for s in students_master}
+
+    # Tra cuu catalog hoat dong de dien tu dong ten hoat dong / diem neu thieu
+    rules_catalog: dict[str, dict] = {}
+    for p in ACTIVITIES_RULES_PATHS:
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    cdata = json.load(f)
+                    for act in cdata.get("activities", []):
+                        acode = str(act.get("activity_code", "")).strip()
+                        if acode:
+                            rules_catalog[acode] = act
+            except Exception:
+                pass
+
+    # Load ho so hien co de MERGE va BAO TOAN 100% LICH SU
+    existing_records = _load_student_ctxh()
+    records_by_mssv = {r.get("mssv"): r for r in existing_records}
+
+    total_new_activities = 0
+
+    for mssv, act_list in activities_by_mssv.items():
+        m_info = master_by_mssv.get(mssv)
+        if mssv not in records_by_mssv:
+            records_by_mssv[mssv] = {
+                "mssv": mssv,
+                "student_name": m_info.get("student_name", "Unknown") if m_info else "Unknown",
+                "faculty": m_info.get("faculty", "") if m_info else "",
+                "course_year": m_info.get("course_year", "2023") if m_info else "2023",
+                "required_days": m_info.get("required_ctxh_days", 4.0) if m_info else 4.0,
+                "accumulated_days": 0.0,
+                "registered_activities": [],
+            }
+        rec = records_by_mssv[mssv]
+        existing_reg_keys = {
+            (a.get("activity_code"), a.get("registration_date"))
+            for a in rec.get("registered_activities", [])
+        }
+        existing_reg_ids = {a.get("reg_id") for a in rec.get("registered_activities", []) if a.get("reg_id")}
+
+        for row in act_list:
+            activity_code = str(row.get("activity_code", "")).strip()
+            catalog_item = rules_catalog.get(activity_code, {})
+
+            activity_name = str(row.get("activity_name", "")).strip()
+            if not activity_name or activity_name.startswith("Hoat dong CTXH ma"):
+                activity_name = catalog_item.get("activity_name") or f"Hoạt động CTXH mã {activity_code}"
+
+            raw_pts = row.get("points") or catalog_item.get("points") or 5
+            try:
+                points = int(float(str(raw_pts).strip().replace(",", ".")))
+            except (ValueError, TypeError):
+                points = 5
+
+            raw_days = row.get("converted_days") or catalog_item.get("converted_days") or (points / 10)
+            try:
+                converted_days = float(str(raw_days).strip().replace(",", "."))
+            except (ValueError, TypeError):
+                converted_days = round(points / 10, 2)
+
+            status = str(row.get("status", "CONFIRMED")).strip().upper() or "CONFIRMED"
+            note = str(row.get("note", "")).strip()
+            reg_date = str(row.get("registration_date", datetime.now().strftime("%Y-%m-%d"))).strip()
+            try:
+                float(reg_date)
+                reg_date = datetime.now().strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+
+            reg_id = str(row.get("reg_id", "")).strip()
+            if not reg_id:
+                short_id = uuid.uuid4().hex[:6].upper()
+                reg_id = f"REG-CTXH-{mssv}-{short_id}"
+
+            # Tranh trung lap hoat dong da co
+            if reg_id in existing_reg_ids or (activity_code and (activity_code, reg_date) in existing_reg_keys):
+                continue
+
+            rec.setdefault("registered_activities", []).append({
+                "reg_id": reg_id,
+                "activity_code": activity_code,
+                "activity_name": activity_name,
+                "points": points,
+                "converted_days": converted_days,
+                "status": status,
+                "registration_date": reg_date,
+                "note": note,
+            })
+            existing_reg_ids.add(reg_id)
+            if activity_code:
+                existing_reg_keys.add((activity_code, reg_date))
+            total_new_activities += 1
+
+        # Tinh lai tong so ngay tich luy thuc te
+        rec["accumulated_days"] = round(
+            sum(a.get("converted_days", 0.0) for a in rec.get("registered_activities", []) if a.get("status") == "CONFIRMED"),
+            2
+        )
+
+    _save_student_ctxh(list(records_by_mssv.values()))
+    msg = (
+        f"Dong bo thanh cong tu '{source_file.name}': "
+        f"{len(activities_by_mssv)} sinh vien duoc cap nhat, them {total_new_activities} hoat dong moi vao CSDL."
+    )
+    sys.stderr.write(f"[sync_ctxh] {msg}\n")
+    return {
+        "status": "success",
+        "file": source_file.name,
+        "total_students": len(records_by_mssv),
+        "total_activities": sum(len(r.get("registered_activities", [])) for r in records_by_mssv.values()),
+    }
 
 
 # Initialize and sync store on startup
@@ -576,12 +969,80 @@ def search_ctxh_rules(
     return "\n\n".join(formatted_passages)
 
 
+
+
+@mcp.tool()
+def check_student_exists(mssv: str) -> str:
+    """[READ TOOL] Kiem tra thong tin sinh vien co ton tai trong he thong co so du lieu cua truong hay khong.
+    Tra ve Ho ten, Khoa, Khoa hoc, He dao tao, va so ngay CTXH tieu chuan de tot nghiep.
+    Nen goi cong cu nay de xac dinh danh tinh sinh vien truoc khi dang ky hoat dong."""
+    students = _load_students()
+    for s in students:
+        if s.get("mssv") == mssv:
+            return (
+                f"[TIM THAY SINH VIEN]\n"
+                f"- MSSV: {s.get('mssv')}\n"
+                f"- Ho ten: {s.get('student_name')}\n"
+                f"- Khoa: {s.get('faculty')}\n"
+                f"- Khoa hoc: {s.get('course_year')}\n"
+                f"- He dao tao: {s.get('program_type')} ({s.get('training_years')} nam)\n"
+                f"- So ngay CTXH yeu cau de tot nghiep: {s.get('required_ctxh_days')} ngay\n"
+                f"- Tinh trang hoc tap: {s.get('status', 'Dang hoc')}"
+            )
+    return f"Loi: Khong tim thay sinh vien co MSSV '{mssv}' trong co so du lieu sinh vien cua truong HCMUTE."
+
+
 # Alias for backward compatibility if needed
 @mcp.tool()
 def search_regulations(query: str, top_k: int = 4, year: Optional[str] = None) -> str:
     """Tra cuu quy dinh CTXH. Tuong duong voi search_ctxh_rules."""
     return search_ctxh_rules(query=query, top_k=top_k, mode="hybrid", year=year)
 
+@mcp.tool()
+def check_graduation_eligibility(mssv: str) -> str:
+    """[SYNTHESIS/CALCULATION TOOL] Tham dinh va tinh toan tien do tich luy ngay CTXH so voi chuan tot nghiep.
+    Doi chieu giua ho so sinh vien (students.json) va so ngay da tich luy thuc te (student_ctxh.json).
+    Tra ve so ngay da co, so ngay con thieu, va ket luan sinh vien da du dieu kien tot nghiep hay chua."""
+    students = _load_students()
+    student_master = next((s for s in students if s.get("mssv") == mssv), None)
+
+    ctxh_data = _load_student_ctxh()
+    student_ctxh = next((s for s in ctxh_data if s.get("mssv") == mssv), None)
+
+    if not student_master and not student_ctxh:
+        return f"Loi: Khong tim thay thong tin sinh vien co MSSV '{mssv}' trong he thong de kiem tra dieu kien tot nghiep."
+
+    name = student_master.get("student_name") if student_master else student_ctxh.get("student_name", "N/A")
+    faculty = student_master.get("faculty") if student_master else student_ctxh.get("faculty", "N/A")
+    req_days = student_master.get("required_ctxh_days", 4.0) if student_master else student_ctxh.get("required_days", 4.0)
+    acc_days = student_ctxh.get("accumulated_days", 0.0) if student_ctxh else 0.0
+
+    activities = student_ctxh.get("registered_activities", []) if student_ctxh else []
+    total_points = sum(a.get("points", 0) for a in activities)
+    req_points_est = int(req_days * 10)
+
+    diff = round(req_days - acc_days, 2)
+    diff_points = max(0, req_points_est - total_points)
+
+    if diff <= 0:
+        status_text = "DA DU DIEU KIEN TOT NGHIEP CTXH"
+        detail_msg = f"Sinh vien da hoan tat {acc_days}/{req_days} ngay CTXH (Tong diem tich luy: {total_points} diem)."
+    else:
+        status_text = f"CHUA DU DIEU KIEN TOT NGHIEP (CON THIEU {diff} NGAY)"
+        detail_msg = (
+            f"Sinh vien hien co {total_points} diem CTXH, quy doi duoc {acc_days}/{req_days} ngay CTXH. "
+            f"Can tich luy them it nhat {diff} ngay nua (tuong duong khoang {diff_points} diem hoat dong)."
+        )
+
+    return (
+        f"[KET QUA THAM DINH DIEU KIEN TOT NGHIEP CTXH]\n"
+        f"- MSSV: {mssv} | Ho ten: {name} | Khoa: {faculty}\n"
+        f"- Tong diem CTXH da tich luy: {total_points} diem\n"
+        f"- So ngay da quy doi thuc te: {acc_days} ngay (Cong thuc: Tong diem / 10 theo quy dinh)\n"
+        f"- So ngay tieu chuan can tich luy: {req_days} ngay (uoc tinh khoang {req_points_est} diem)\n"
+        f"- Danh gia tien do: {status_text}\n"
+        f"- Chi tiet: {detail_msg}"
+    )
 
 @mcp.tool()
 def list_indexed_documents() -> str:
@@ -638,6 +1099,28 @@ def get_document_full(doc_id: str) -> str:
 
 
 @mcp.tool()
+def sync_ctxh_activities() -> str:
+    try:
+        result = sync_ctxh_from_file()
+    except Exception as e:
+        return f"Loi khi dong bo hoat dong CTXH: {e}"
+
+    if result["status"] == "success":
+        return (
+            f"[CTXH SYNC - THANH CONG] Da dong bo tu file '{result['file']}'.\n"
+            f"  - Tong so sinh vien co hoat dong: {result['total_students']}\n"
+            f"  - Tong so ban ghi hoat dong: {result['total_activities']}\n"
+            f"  - Du lieu da duoc ghi vao student_activities.json."
+        )
+    elif result["status"] in {"none", "kept"}:
+        return f"[CTXH SYNC - BAO TOAN] {result['message']}"
+    elif result["status"] == "empty":
+        return f"[CTXH SYNC - TRONG] {result['message']}"
+    else:
+        return f"[CTXH SYNC - LOI] {result.get('message', 'Loi khong xac dinh.')}"
+
+
+@mcp.tool()
 def export_ctxh_rules_json() -> str:
     try:
         result = sync_ctxh_rules_from_file()
@@ -655,6 +1138,60 @@ def export_ctxh_rules_json() -> str:
         return f"[CTXH RULES - TRONG] {result['message']}"
     else:
         return f"[CTXH RULES - LOI] {result.get('message', 'Loi khong xac dinh.')}"
+    
+    
+    
+@mcp.tool()
+def sync_documents() -> str:
+    """Dong bo hoa va quet lai thu muc data/ de cap nhat cac file quy dinh CTXH, CSDL sinh vien tu Excel, hoat dong CTXH, va file activities.json."""
+    report = sync_knowledge_base()
+    excel_report = sync_students_from_excel()
+    ctxh_report = sync_ctxh_from_file()
+    rules_report = sync_ctxh_rules_from_file()
+
+    lines = ["Bao cao dong bo co so tri thuc va du lieu CTXH:"]
+
+    # Tai lieu quy dinh RAG
+    if report["added"]:
+        lines.append(f"  - Tep quy dinh moi them vao: {', '.join(report['added'])}")
+    if report["updated"]:
+        lines.append(f"  - Tep quy dinh da cap nhat: {', '.join(report['updated'])}")
+    if report["removed"]:
+        lines.append(f"  - Tep quy dinh da xoa: {', '.join(report['removed'])}")
+    if not (report["added"] or report["updated"] or report["removed"]):
+        lines.append("  - Tat ca tai lieu quy dinh da duoc dong bo day du. Khong co thay doi.")
+    lines.append(f"  - Tong so van ban: {report['total_files']} tep, {report['total_chunks']} chunks.")
+
+    # CSDL sinh vien tu Excel
+    if excel_report.get("status") == "success":
+        lines.append(f"  - CSDL sinh vien: Dong bo thanh cong {excel_report.get('total_students')} sinh vien tu {excel_report.get('file')}.")
+    elif excel_report.get("status") == "removed":
+        lines.append("  - CSDL sinh vien: Khong tim thay tep students.xlsx. Danh sach sinh vien duoc giu nguyen.")
+    elif excel_report.get("status") == "empty":
+        lines.append("  - CSDL sinh vien: Tep students.xlsx trong, khong co du lieu.")
+    elif excel_report.get("status") == "error":
+        lines.append(f"  - CSDL sinh vien: {excel_report.get('message')}")
+
+    # Hoat dong CTXH tu file Excel nguon (neu co file thi thong bao, neu khong co thi khoi thong bao)
+    if ctxh_report.get("status") == "success":
+        lines.append(
+            f"  - Hoat dong CTXH (sinh vien): Dong bo thanh cong {ctxh_report.get('total_students')} sinh vien, "
+            f"{ctxh_report.get('total_activities')} hoat dong tu '{ctxh_report.get('file')}'."
+        )
+    elif ctxh_report.get("status") == "error":
+        lines.append(f"  - Hoat dong CTXH (sinh vien): {ctxh_report.get('message')}")
+
+    # Quy che va cach tinh diem CTXH da boc tach vao activities.json / ctxh.json
+    if rules_report.get("status") == "success":
+        lines.append(
+            f"  - Bang diem & Quy tac CTXH: Da boc tach thanh cong {rules_report.get('total_activities')} hoat dong va cach tinh diem tu '{rules_report.get('file')}' vao activities.json."
+        )
+    elif rules_report.get("status") == "empty":
+        lines.append(f"  - Bang diem & Quy tac CTXH: {rules_report.get('message')}")
+    elif rules_report.get("status") == "error":
+        lines.append(f"  - Bang diem & Quy tac CTXH: {rules_report.get('message')}")
+
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
