@@ -660,6 +660,35 @@ def _normalize_ctxh_record_keys(raw_row: dict) -> dict:
 
     return normalized
 
+
+def _find_ctxh_source_file() -> Path | None:
+    """Tim kiem file Excel luu hoat dong da tham gia CTXH cua sinh vien trong thu muc data/."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # 1. Kiem tra cac ten file Excel uu tien
+    for fname in CTXH_STUDENT_ACTIVITY_FILENAMES:
+        p = DATA_DIR / fname
+        if p.exists() and p.is_file():
+            return p
+
+    # 2. Quet cac file Excel khac trong data/ co chua tu khoa hoat dong sinh vien
+    for p in sorted(DATA_DIR.glob("*.xlsx")):
+        if p.name.startswith("~$") or p.name.startswith("."):
+            continue
+        p_name = p.name.lower()
+        if p_name in {"students.xlsx", "students_ctxh.xlsx", "activities.xlsx"}:
+            continue
+        if any(kw in p_name for kw in ["activity", "activities", "hoat_dong", "tham_gia", "sinh_vien"]):
+            return p
+
+    for p in sorted(DATA_DIR.glob("*.xlsm")):
+        if p.name.startswith("~$") or p.name.startswith("."):
+            continue
+        p_name = p.name.lower()
+        if any(kw in p_name for kw in ["activity", "activities", "hoat_dong", "tham_gia", "sinh_vien"]):
+            return p
+
+    return None
+
 def sync_ctxh_rules_from_file() -> dict:
     """
     Boc tach du lieu hoat dong CTXH va cach tinh diem tu cac file Excel (.xlsx), Word (.docx), PDF, Text (.txt) trong data/.
@@ -752,7 +781,62 @@ def _load_students() -> list[dict]:
             return json.load(f)
     except Exception:
         return []
-    
+
+
+def _parse_ctxh_rows_from_file(fpath: Path) -> list[dict]:
+    """
+    Phan tich cac ban ghi hoat dong CTXH da tham gia tu file Excel (.xlsx/.xlsm) hoac .csv.
+    Tra ve danh sach cac dict da chuan hoa khoa: mssv, activity_code, activity_name, points, converted_days, status, note, registration_date.
+    """
+    ext = fpath.suffix.lower()
+    rows: list[dict] = []
+
+    if ext in {".xlsx", ".xlsm"}:
+        try:
+            wb = load_workbook(str(fpath), data_only=True)
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                raw_rows = list(ws.iter_rows(values_only=True))
+                if len(raw_rows) < 2:
+                    continue
+                # Tim header row (trong toi da 10 dong dau)
+                header_idx = -1
+                for r_idx, r in enumerate(raw_rows[:10]):
+                    r_strs = [str(c).strip().lower() for c in r if c is not None]
+                    if any(any(k in s for k in ["mssv", "sinh_vien", "ma_sv", "hoat_dong", "activity", "code"]) for s in r_strs):
+                        header_idx = r_idx
+                        break
+
+                if header_idx != -1:
+                    raw_headers = [str(h).strip().lower() if h is not None else f"col_{i}" for i, h in enumerate(raw_rows[header_idx])]
+                    data_rows = raw_rows[header_idx + 1:]
+                else:
+                    raw_headers = [str(h).strip().lower() if h is not None else f"col_{i}" for i, h in enumerate(raw_rows[0])]
+                    data_rows = raw_rows[1:]
+
+                for r in data_rows:
+                    if not any(r):
+                        continue
+                    r_dict = dict(zip(raw_headers, r))
+                    norm = _normalize_ctxh_record_keys(r_dict)
+                    if norm.get("mssv") and (norm.get("activity_code") or norm.get("activity_name")):
+                        rows.append(norm)
+            wb.close()
+        except Exception as e:
+            sys.stderr.write(f"[sync_ctxh] Loi doc xlsx {fpath.name}: {e}\n")
+
+    elif ext == ".csv":
+        try:
+            with open(fpath, newline="", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for r in reader:
+                    norm = _normalize_ctxh_record_keys(r)
+                    if norm.get("mssv") and (norm.get("activity_code") or norm.get("activity_name")):
+                        rows.append(norm)
+        except Exception as e:
+            sys.stderr.write(f"[sync_ctxh] Loi doc csv {fpath.name}: {e}\n")
+
+    return rows   
     
     
 def sync_ctxh_from_file() -> dict:
