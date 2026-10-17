@@ -51,8 +51,15 @@ LOGS_DIR = HERE / "logs" / "app"
 PROMPT_PATH = HERE / "prompts" / "system_agent.txt"
 
 # Prefer virtualenv python if available, fallback to sys.executable
-VENV_PYTHON = HERE.parent / ".venv" / "Scripts" / "python.exe"
-PYTHON_CMD = str(VENV_PYTHON) if VENV_PYTHON.exists() else sys.executable
+def _resolve_python_cmd() -> str:
+    for base in [HERE, HERE.parent]:
+        for bin_sub, exe_name in [("Scripts", "python.exe"), ("bin", "python")]:
+            candidate = base / ".venv" / bin_sub / exe_name
+            if candidate.exists():
+                return str(candidate)
+    return sys.executable
+
+PYTHON_CMD = _resolve_python_cmd()
 
 SERVER_PARAMS = StdioServerParameters(
     command=PYTHON_CMD,
