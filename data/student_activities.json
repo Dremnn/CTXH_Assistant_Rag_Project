@@ -44,8 +44,20 @@
     "faculty": "Công nghệ Thông tin",
     "course_year": "2023",
     "required_days": 3.0,
-    "accumulated_days": 0.0,
-    "registered_activities": []
+    "accumulated_days": 1.0,
+    "registered_activities": [
+      {
+        "reg_id": "REG-CTXH-20261018-24BD",
+        "activity_code": "001202",
+        "activity_name": "Đội trưởng tình nguyện viên trạm hiến máu lưu động (01 đợt)",
+        "points": 12,
+        "converted_days": 1.0,
+        "status": "CONFIRMED",
+        "registration_date": "2026-10-18",
+        "note": "Đội trưởng tình nguyện viên trạm hiến máu lưu động (01 đợt)",
+        "category": "Hiến máu cứu người"
+      }
+    ]
   },
   {
     "mssv": "23119018",
