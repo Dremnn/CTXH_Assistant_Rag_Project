@@ -1,3 +1,8 @@
+"""
+Demo script to test unified VectorStore with built-in Hybrid Search.
+Run using: uv run python demo_hybrid_search.py
+"""
+
 from pathlib import Path
 import sys
 
@@ -6,7 +11,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-CURRENT_DIR = Path(__file__).resolve().parent.parent
+CURRENT_DIR = Path(__file__).resolve().parent
 if str(CURRENT_DIR) not in sys.path:
     sys.path.insert(0, str(CURRENT_DIR))
 

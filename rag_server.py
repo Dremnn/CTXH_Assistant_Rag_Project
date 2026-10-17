@@ -61,17 +61,20 @@ CTXH_STUDENT_ACTIVITY_FILENAMES = [
 # Global Store
 STORE = VectorStore()
 
+
 def _get_student_activities_path() -> Path:
     for p in STUDENT_ACTIVITIES_PATHS:
         if p.exists():
             return p
     return STUDENT_ACTIVITIES_PATHS[0]
 
+
 def _get_excel_students_path() -> Path | None:
     for p in EXCEL_STUDENTS_PATHS:
         if p.exists():
             return p
     return None
+
 
 def _get_activities_rules_path() -> Path:
     for p in ACTIVITIES_RULES_PATHS:
@@ -185,31 +188,12 @@ def _ensure_index_loaded() -> None:
             STORE = VectorStore()
 
     sync_knowledge_base()
+    sync_students_from_excel()
     sync_ctxh_rules_from_file()
+    sync_ctxh_from_file()
 
 
-def _extract_rules_from_text(text: str, rules_dict: dict) -> None:
-    """Boc tach quy tac tinh diem, tru diem va loai tru tu van ban quy che."""
-    t_lower = text.lower()
-    if "chia cho 10" in t_lower:
-        rules_dict["formula"] = "Lấy tổng điểm hoạt động CTXH SV đã tích lũy chia cho 10 (số lẻ dưới 5 làm tròn xuống; tròn 5 điểm, quy đổi thành nửa ngày CTXH; trên 5 làm tròn thành 10, quy đổi thành một ngày CTXH)."
-    elif "chia cho 12" in t_lower and "formula" not in rules_dict:
-        rules_dict["formula"] = "Lấy tổng điểm CTXH tích lũy chia cho 12 (chuẩn quốc tế áp dụng từ 2025)."
-    elif "chia cho 8" in t_lower and "formula" not in rules_dict:
-        rules_dict["formula"] = "Lấy tổng điểm hoạt động CTXH tích lũy chia cho 8 (Quy định 2023)."
-
-    for line in text.splitlines():
-        l_lower = line.lower()
-        if ("trừ" in l_lower or "tru " in l_lower) and ("ngày" in l_lower or "ngay" in l_lower or "đrl" in l_lower or "kỷ luật" in l_lower):
-            clean = line.strip().lstrip("-*•✓ ").strip()
-            if len(clean) > 15 and clean not in rules_dict.setdefault("deduction_rules", []):
-                rules_dict["deduction_rules"].append(clean)
-        if ("không được tính" in l_lower or "không tính" in l_lower or "thù lao" in l_lower or "tiền công" in l_lower):
-            clean = line.strip().lstrip("-*•✓ ").strip()
-            if len(clean) > 15 and clean not in rules_dict.setdefault("exclusions", []):
-                rules_dict["exclusions"].append(clean)
-                
-                
+# Database helper functions for CTXH records
 def _load_student_ctxh() -> list[dict]:
     path = _get_student_activities_path()
     if not path.exists():
@@ -223,8 +207,22 @@ def _load_student_ctxh() -> list[dict]:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        return []                
-                
+        return []
+
+
+def _save_student_ctxh(data: list[dict]) -> None:
+    if not data:
+        # Safety guard: never wipe file with empty list if the files already exist and have data
+        current_data = _load_student_ctxh()
+        if current_data:
+            sys.stderr.write("[Warning] Tu choi ghi de danh sach sinh vien rong [] len CSDL da co du lieu.\n")
+            return
+    for p in STUDENT_ACTIVITIES_PATHS:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 def sync_students_from_excel() -> dict:
     """
     Doc file Excel (students.xlsx hoac students_ctxh.xlsx) va dong bo vao students.json.
@@ -344,18 +342,29 @@ def sync_students_from_excel() -> dict:
         "total_students": len(students),
         "file": str(excel_path.name),
     }
-    
-def _save_student_ctxh(data: list[dict]) -> None:
-    if not data:
-        # Safety guard: never wipe file with empty list if the files already exist and have data
-        current_data = _load_student_ctxh()
-        if current_data:
-            sys.stderr.write("[Warning] Tu choi ghi de danh sach sinh vien rong [] len CSDL da co du lieu.\n")
-            return
-    for p in STUDENT_ACTIVITIES_PATHS:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _extract_rules_from_text(text: str, rules_dict: dict) -> None:
+    """Boc tach quy tac tinh diem, tru diem va loai tru tu van ban quy che."""
+    t_lower = text.lower()
+    if "chia cho 10" in t_lower:
+        rules_dict["formula"] = "Lấy tổng điểm hoạt động CTXH SV đã tích lũy chia cho 10 (số lẻ dưới 5 làm tròn xuống; tròn 5 điểm, quy đổi thành nửa ngày CTXH; trên 5 làm tròn thành 10, quy đổi thành một ngày CTXH)."
+    elif "chia cho 12" in t_lower and "formula" not in rules_dict:
+        rules_dict["formula"] = "Lấy tổng điểm CTXH tích lũy chia cho 12 (chuẩn quốc tế áp dụng từ 2025)."
+    elif "chia cho 8" in t_lower and "formula" not in rules_dict:
+        rules_dict["formula"] = "Lấy tổng điểm hoạt động CTXH tích lũy chia cho 8 (Quy định 2023)."
+
+    for line in text.splitlines():
+        l_lower = line.lower()
+        if ("trừ" in l_lower or "tru " in l_lower) and ("ngày" in l_lower or "ngay" in l_lower or "đrl" in l_lower or "kỷ luật" in l_lower):
+            clean = line.strip().lstrip("-*•✓ ").strip()
+            if len(clean) > 15 and clean not in rules_dict.setdefault("deduction_rules", []):
+                rules_dict["deduction_rules"].append(clean)
+        if ("không được tính" in l_lower or "không tính" in l_lower or "thù lao" in l_lower or "tiền công" in l_lower):
+            clean = line.strip().lstrip("-*•✓ ").strip()
+            if len(clean) > 15 and clean not in rules_dict.setdefault("exclusions", []):
+                rules_dict["exclusions"].append(clean)
+
 
 def _find_all_ctxh_rules_files() -> list[Path]:
     """
@@ -595,70 +604,6 @@ def _parse_ctxh_rules_from_file(fpath: Path) -> dict:
         "activities": activities
     }
 
-def _normalize_ctxh_record_keys(raw_row: dict) -> dict:
-    """Chuan hoa ten cot tu tieng Viet hoac tieng Anh ve khoa chuan cua he thong."""
-    normalized = {}
-    for k, v in raw_row.items():
-        if v is None:
-            continue
-        key_clean = str(k).strip().lower().replace(" ", "_")
-        val = str(v).strip()
-        if not val or val.lower() == "none":
-            continue
-
-        # MSSV
-        if any(w in key_clean for w in ["mssv", "ma_sv", "masv", "ma_sinh_vien", "student_id", "msv"]):
-            if val.endswith(".0"):
-                val = val[:-2]
-            normalized["mssv"] = val
-        # Ma hoat dong
-        elif any(w in key_clean for w in ["ma_hoat_dong", "ma_hd", "mahd", "activity_code", "ma_so"]):
-            if val.endswith(".0"):
-                val = val[:-2]
-            normalized["activity_code"] = val
-        # Ten hoat dong
-        elif any(w in key_clean for w in ["ten_hoat_dong", "ten_hd", "tenhd", "hoat_dong", "activity_name", "activity", "noi_dung"]):
-            normalized["activity_name"] = val
-        # Diem
-        elif any(w in key_clean for w in ["diem", "points", "score"]):
-            normalized["points"] = val
-        # Ngay quy doi
-        elif any(w in key_clean for w in ["ngay_quy_doi", "so_ngay", "ngay_ctxh", "converted_days", "days"]):
-            normalized["converted_days"] = val
-        # Trang thai
-        elif any(w in key_clean for w in ["trang_thai", "tinh_trang", "status"]):
-            normalized["status"] = val
-        # Ngay dang ky / tham gia
-        elif any(w in key_clean for w in ["ngay_tham_gia", "ngay_dk", "ngay_dang_ky", "registration_date", "date", "thoi_gian"]):
-            normalized["registration_date"] = val
-        # Ma dang ky
-        elif any(w in key_clean for w in ["ma_dk", "reg_id", "registration_id"]):
-            normalized["reg_id"] = val
-        # Ghi chu
-        elif any(w in key_clean for w in ["ghi_chu", "note", "notes", "nhan_xet"]):
-            normalized["note"] = val
-        else:
-            normalized[key_clean] = val
-
-    # Fallback tu dong nhan dien cot theo gia tri neu header khong khop
-    if "mssv" not in normalized:
-        for v in raw_row.values():
-            s = str(v).strip()
-            if s.endswith(".0"):
-                s = s[:-2]
-            if re.match(r"^\d{7,10}$", s):
-                normalized["mssv"] = s
-                break
-    if "activity_code" not in normalized:
-        for v in raw_row.values():
-            s = str(v).strip()
-            if s.endswith(".0"):
-                s = s[:-2]
-            if re.match(r"^\d{6}$", s):
-                normalized["activity_code"] = s
-                break
-
-    return normalized
 
 def sync_ctxh_rules_from_file() -> dict:
     """
@@ -742,19 +687,159 @@ def sync_ctxh_rules_from_file() -> dict:
         "total_activities": len(activities_list),
         "target_file": "activities.json"
     }
-    
-    
-def _load_students() -> list[dict]:
-    if not STUDENTS_DB_PATH.exists():
-        return []
-    try:
-        with open(STUDENTS_DB_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
-    
-    
-    
+
+
+def _find_ctxh_source_file() -> Path | None:
+    """Tim kiem file Excel luu hoat dong da tham gia CTXH cua sinh vien trong thu muc data/."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # 1. Kiem tra cac ten file Excel uu tien
+    for fname in CTXH_STUDENT_ACTIVITY_FILENAMES:
+        p = DATA_DIR / fname
+        if p.exists() and p.is_file():
+            return p
+
+    # 2. Quet cac file Excel khac trong data/ co chua tu khoa hoat dong sinh vien
+    for p in sorted(DATA_DIR.glob("*.xlsx")):
+        if p.name.startswith("~$") or p.name.startswith("."):
+            continue
+        p_name = p.name.lower()
+        if p_name in {"students.xlsx", "students_ctxh.xlsx", "activities.xlsx"}:
+            continue
+        if any(kw in p_name for kw in ["activity", "activities", "hoat_dong", "tham_gia", "sinh_vien"]):
+            return p
+
+    for p in sorted(DATA_DIR.glob("*.xlsm")):
+        if p.name.startswith("~$") or p.name.startswith("."):
+            continue
+        p_name = p.name.lower()
+        if any(kw in p_name for kw in ["activity", "activities", "hoat_dong", "tham_gia", "sinh_vien"]):
+            return p
+
+    return None
+
+
+def _normalize_ctxh_record_keys(raw_row: dict) -> dict:
+    """Chuan hoa ten cot tu tieng Viet hoac tieng Anh ve khoa chuan cua he thong."""
+    normalized = {}
+    for k, v in raw_row.items():
+        if v is None:
+            continue
+        key_clean = str(k).strip().lower().replace(" ", "_")
+        val = str(v).strip()
+        if not val or val.lower() == "none":
+            continue
+
+        # MSSV
+        if any(w in key_clean for w in ["mssv", "ma_sv", "masv", "ma_sinh_vien", "student_id", "msv"]):
+            if val.endswith(".0"):
+                val = val[:-2]
+            normalized["mssv"] = val
+        # Ma hoat dong
+        elif any(w in key_clean for w in ["ma_hoat_dong", "ma_hd", "mahd", "activity_code", "ma_so"]):
+            if val.endswith(".0"):
+                val = val[:-2]
+            normalized["activity_code"] = val
+        # Ten hoat dong
+        elif any(w in key_clean for w in ["ten_hoat_dong", "ten_hd", "tenhd", "hoat_dong", "activity_name", "activity", "noi_dung"]):
+            normalized["activity_name"] = val
+        # Diem
+        elif any(w in key_clean for w in ["diem", "points", "score"]):
+            normalized["points"] = val
+        # Ngay quy doi
+        elif any(w in key_clean for w in ["ngay_quy_doi", "so_ngay", "ngay_ctxh", "converted_days", "days"]):
+            normalized["converted_days"] = val
+        # Trang thai
+        elif any(w in key_clean for w in ["trang_thai", "tinh_trang", "status"]):
+            normalized["status"] = val
+        # Ngay dang ky / tham gia
+        elif any(w in key_clean for w in ["ngay_tham_gia", "ngay_dk", "ngay_dang_ky", "registration_date", "date", "thoi_gian"]):
+            normalized["registration_date"] = val
+        # Ma dang ky
+        elif any(w in key_clean for w in ["ma_dk", "reg_id", "registration_id"]):
+            normalized["reg_id"] = val
+        # Ghi chu
+        elif any(w in key_clean for w in ["ghi_chu", "note", "notes", "nhan_xet"]):
+            normalized["note"] = val
+        else:
+            normalized[key_clean] = val
+
+    # Fallback tu dong nhan dien cot theo gia tri neu header khong khop
+    if "mssv" not in normalized:
+        for v in raw_row.values():
+            s = str(v).strip()
+            if s.endswith(".0"):
+                s = s[:-2]
+            if re.match(r"^\d{7,10}$", s):
+                normalized["mssv"] = s
+                break
+    if "activity_code" not in normalized:
+        for v in raw_row.values():
+            s = str(v).strip()
+            if s.endswith(".0"):
+                s = s[:-2]
+            if re.match(r"^\d{6}$", s):
+                normalized["activity_code"] = s
+                break
+
+    return normalized
+
+
+def _parse_ctxh_rows_from_file(fpath: Path) -> list[dict]:
+    """
+    Phan tich cac ban ghi hoat dong CTXH da tham gia tu file Excel (.xlsx/.xlsm) hoac .csv.
+    Tra ve danh sach cac dict da chuan hoa khoa: mssv, activity_code, activity_name, points, converted_days, status, note, registration_date.
+    """
+    ext = fpath.suffix.lower()
+    rows: list[dict] = []
+
+    if ext in {".xlsx", ".xlsm"}:
+        try:
+            wb = load_workbook(str(fpath), data_only=True)
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                raw_rows = list(ws.iter_rows(values_only=True))
+                if len(raw_rows) < 2:
+                    continue
+                # Tim header row (trong toi da 10 dong dau)
+                header_idx = -1
+                for r_idx, r in enumerate(raw_rows[:10]):
+                    r_strs = [str(c).strip().lower() for c in r if c is not None]
+                    if any(any(k in s for k in ["mssv", "sinh_vien", "ma_sv", "hoat_dong", "activity", "code"]) for s in r_strs):
+                        header_idx = r_idx
+                        break
+
+                if header_idx != -1:
+                    raw_headers = [str(h).strip().lower() if h is not None else f"col_{i}" for i, h in enumerate(raw_rows[header_idx])]
+                    data_rows = raw_rows[header_idx + 1:]
+                else:
+                    raw_headers = [str(h).strip().lower() if h is not None else f"col_{i}" for i, h in enumerate(raw_rows[0])]
+                    data_rows = raw_rows[1:]
+
+                for r in data_rows:
+                    if not any(r):
+                        continue
+                    r_dict = dict(zip(raw_headers, r))
+                    norm = _normalize_ctxh_record_keys(r_dict)
+                    if norm.get("mssv") and (norm.get("activity_code") or norm.get("activity_name")):
+                        rows.append(norm)
+            wb.close()
+        except Exception as e:
+            sys.stderr.write(f"[sync_ctxh] Loi doc xlsx {fpath.name}: {e}\n")
+
+    elif ext == ".csv":
+        try:
+            with open(fpath, newline="", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for r in reader:
+                    norm = _normalize_ctxh_record_keys(r)
+                    if norm.get("mssv") and (norm.get("activity_code") or norm.get("activity_name")):
+                        rows.append(norm)
+        except Exception as e:
+            sys.stderr.write(f"[sync_ctxh] Loi doc csv {fpath.name}: {e}\n")
+
+    return rows
+
+
 def sync_ctxh_from_file() -> dict:
     """
     Tim kiem file Excel luu hoat dong da tham gia CTXH cua sinh vien trong data/.
@@ -903,6 +988,16 @@ def sync_ctxh_from_file() -> dict:
     }
 
 
+def _load_students() -> list[dict]:
+    if not STUDENTS_DB_PATH.exists():
+        return []
+    try:
+        with open(STUDENTS_DB_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
 # Initialize and sync store on startup
 _ensure_index_loaded()
 
@@ -969,80 +1064,12 @@ def search_ctxh_rules(
     return "\n\n".join(formatted_passages)
 
 
-
-
-@mcp.tool()
-def check_student_exists(mssv: str) -> str:
-    """[READ TOOL] Kiem tra thong tin sinh vien co ton tai trong he thong co so du lieu cua truong hay khong.
-    Tra ve Ho ten, Khoa, Khoa hoc, He dao tao, va so ngay CTXH tieu chuan de tot nghiep.
-    Nen goi cong cu nay de xac dinh danh tinh sinh vien truoc khi dang ky hoat dong."""
-    students = _load_students()
-    for s in students:
-        if s.get("mssv") == mssv:
-            return (
-                f"[TIM THAY SINH VIEN]\n"
-                f"- MSSV: {s.get('mssv')}\n"
-                f"- Ho ten: {s.get('student_name')}\n"
-                f"- Khoa: {s.get('faculty')}\n"
-                f"- Khoa hoc: {s.get('course_year')}\n"
-                f"- He dao tao: {s.get('program_type')} ({s.get('training_years')} nam)\n"
-                f"- So ngay CTXH yeu cau de tot nghiep: {s.get('required_ctxh_days')} ngay\n"
-                f"- Tinh trang hoc tap: {s.get('status', 'Dang hoc')}"
-            )
-    return f"Loi: Khong tim thay sinh vien co MSSV '{mssv}' trong co so du lieu sinh vien cua truong HCMUTE."
-
-
 # Alias for backward compatibility if needed
 @mcp.tool()
 def search_regulations(query: str, top_k: int = 4, year: Optional[str] = None) -> str:
     """Tra cuu quy dinh CTXH. Tuong duong voi search_ctxh_rules."""
     return search_ctxh_rules(query=query, top_k=top_k, mode="hybrid", year=year)
 
-@mcp.tool()
-def check_graduation_eligibility(mssv: str) -> str:
-    """[SYNTHESIS/CALCULATION TOOL] Tham dinh va tinh toan tien do tich luy ngay CTXH so voi chuan tot nghiep.
-    Doi chieu giua ho so sinh vien (students.json) va so ngay da tich luy thuc te (student_ctxh.json).
-    Tra ve so ngay da co, so ngay con thieu, va ket luan sinh vien da du dieu kien tot nghiep hay chua."""
-    students = _load_students()
-    student_master = next((s for s in students if s.get("mssv") == mssv), None)
-
-    ctxh_data = _load_student_ctxh()
-    student_ctxh = next((s for s in ctxh_data if s.get("mssv") == mssv), None)
-
-    if not student_master and not student_ctxh:
-        return f"Loi: Khong tim thay thong tin sinh vien co MSSV '{mssv}' trong he thong de kiem tra dieu kien tot nghiep."
-
-    name = student_master.get("student_name") if student_master else student_ctxh.get("student_name", "N/A")
-    faculty = student_master.get("faculty") if student_master else student_ctxh.get("faculty", "N/A")
-    req_days = student_master.get("required_ctxh_days", 4.0) if student_master else student_ctxh.get("required_days", 4.0)
-    acc_days = student_ctxh.get("accumulated_days", 0.0) if student_ctxh else 0.0
-
-    activities = student_ctxh.get("registered_activities", []) if student_ctxh else []
-    total_points = sum(a.get("points", 0) for a in activities)
-    req_points_est = int(req_days * 10)
-
-    diff = round(req_days - acc_days, 2)
-    diff_points = max(0, req_points_est - total_points)
-
-    if diff <= 0:
-        status_text = "DA DU DIEU KIEN TOT NGHIEP CTXH"
-        detail_msg = f"Sinh vien da hoan tat {acc_days}/{req_days} ngay CTXH (Tong diem tich luy: {total_points} diem)."
-    else:
-        status_text = f"CHUA DU DIEU KIEN TOT NGHIEP (CON THIEU {diff} NGAY)"
-        detail_msg = (
-            f"Sinh vien hien co {total_points} diem CTXH, quy doi duoc {acc_days}/{req_days} ngay CTXH. "
-            f"Can tich luy them it nhat {diff} ngay nua (tuong duong khoang {diff_points} diem hoat dong)."
-        )
-
-    return (
-        f"[KET QUA THAM DINH DIEU KIEN TOT NGHIEP CTXH]\n"
-        f"- MSSV: {mssv} | Ho ten: {name} | Khoa: {faculty}\n"
-        f"- Tong diem CTXH da tich luy: {total_points} diem\n"
-        f"- So ngay da quy doi thuc te: {acc_days} ngay (Cong thuc: Tong diem / 10 theo quy dinh)\n"
-        f"- So ngay tieu chuan can tich luy: {req_days} ngay (uoc tinh khoang {req_points_est} diem)\n"
-        f"- Danh gia tien do: {status_text}\n"
-        f"- Chi tiet: {detail_msg}"
-    )
 
 @mcp.tool()
 def list_indexed_documents() -> str:
@@ -1099,6 +1126,232 @@ def get_document_full(doc_id: str) -> str:
 
 
 @mcp.tool()
+def check_student_exists(mssv: str) -> str:
+    """[READ TOOL] Kiem tra thong tin sinh vien co ton tai trong he thong co so du lieu cua truong hay khong.
+    Tra ve Ho ten, Khoa, Khoa hoc, He dao tao, va so ngay CTXH tieu chuan de tot nghiep.
+    Nen goi cong cu nay de xac dinh danh tinh sinh vien truoc khi dang ky hoat dong."""
+    students = _load_students()
+    for s in students:
+        if s.get("mssv") == mssv:
+            return (
+                f"[TIM THAY SINH VIEN]\n"
+                f"- MSSV: {s.get('mssv')}\n"
+                f"- Ho ten: {s.get('student_name')}\n"
+                f"- Khoa: {s.get('faculty')}\n"
+                f"- Khoa hoc: {s.get('course_year')}\n"
+                f"- He dao tao: {s.get('program_type')} ({s.get('training_years')} nam)\n"
+                f"- So ngay CTXH yeu cau de tot nghiep: {s.get('required_ctxh_days')} ngay\n"
+                f"- Tinh trang hoc tap: {s.get('status', 'Dang hoc')}"
+            )
+    return f"Loi: Khong tim thay sinh vien co MSSV '{mssv}' trong co so du lieu sinh vien cua truong HCMUTE."
+
+
+@mcp.tool()
+def check_graduation_eligibility(mssv: str) -> str:
+    """[SYNTHESIS/CALCULATION TOOL] Tham dinh va tinh toan tien do tich luy ngay CTXH so voi chuan tot nghiep.
+    Doi chieu giua ho so sinh vien (students.json) va so ngay da tich luy thuc te (student_ctxh.json).
+    Tra ve so ngay da co, so ngay con thieu, va ket luan sinh vien da du dieu kien tot nghiep hay chua."""
+    students = _load_students()
+    student_master = next((s for s in students if s.get("mssv") == mssv), None)
+
+    ctxh_data = _load_student_ctxh()
+    student_ctxh = next((s for s in ctxh_data if s.get("mssv") == mssv), None)
+
+    if not student_master and not student_ctxh:
+        return f"Loi: Khong tim thay thong tin sinh vien co MSSV '{mssv}' trong he thong de kiem tra dieu kien tot nghiep."
+
+    name = student_master.get("student_name") if student_master else student_ctxh.get("student_name", "N/A")
+    faculty = student_master.get("faculty") if student_master else student_ctxh.get("faculty", "N/A")
+    req_days = student_master.get("required_ctxh_days", 4.0) if student_master else student_ctxh.get("required_days", 4.0)
+    acc_days = student_ctxh.get("accumulated_days", 0.0) if student_ctxh else 0.0
+
+    activities = student_ctxh.get("registered_activities", []) if student_ctxh else []
+    total_points = sum(a.get("points", 0) for a in activities)
+    req_points_est = int(req_days * 10)
+
+    diff = round(req_days - acc_days, 2)
+    diff_points = max(0, req_points_est - total_points)
+
+    if diff <= 0:
+        status_text = "DA DU DIEU KIEN TOT NGHIEP CTXH"
+        detail_msg = f"Sinh vien da hoan tat {acc_days}/{req_days} ngay CTXH (Tong diem tich luy: {total_points} diem)."
+    else:
+        status_text = f"CHUA DU DIEU KIEN TOT NGHIEP (CON THIEU {diff} NGAY)"
+        detail_msg = (
+            f"Sinh vien hien co {total_points} diem CTXH, quy doi duoc {acc_days}/{req_days} ngay CTXH. "
+            f"Can tich luy them it nhat {diff} ngay nua (tuong duong khoang {diff_points} diem hoat dong)."
+        )
+
+    return (
+        f"[KET QUA THAM DINH DIEU KIEN TOT NGHIEP CTXH]\n"
+        f"- MSSV: {mssv} | Ho ten: {name} | Khoa: {faculty}\n"
+        f"- Tong diem CTXH da tich luy: {total_points} diem\n"
+        f"- So ngay da quy doi thuc te: {acc_days} ngay (Cong thuc: Tong diem / 10 theo quy dinh)\n"
+        f"- So ngay tieu chuan can tich luy: {req_days} ngay (uoc tinh khoang {req_points_est} diem)\n"
+        f"- Danh gia tien do: {status_text}\n"
+        f"- Chi tiet: {detail_msg}"
+    )
+
+
+@mcp.tool()
+def register_ctxh_activity(
+    mssv: str,
+    activity_code: str,
+    activity_name: str = "",
+    points: int = 5,
+    converted_days: float = 0.5,
+    note: str = "",
+) -> str:
+    """[WRITE TOOL - SIDE EFFECT] Dang ky hoat dong CTXH va ghi nhan vao ho so sinh vien trong he thong du lieu.
+    Cap nhat so ngay tich luy thuc te cua sinh vien.
+    Bat buoc goi tiep cong cu get_ctxh_status ngay sau khi goi tool nay de verify trang thai ho so.
+    If the student does not exist, a new record is created with default values.
+    """
+    data = _load_student_ctxh()
+    student = None
+    for s in data:
+        if s.get("mssv") == mssv:
+            student = s
+            break
+    if not student:
+        # Lay thong tin tu danh sach sinh vien goc neu co
+        students_master = _load_students()
+        m_info = next((m for m in students_master if m.get("mssv") == mssv), None)
+        student = {
+            "mssv": mssv,
+            "student_name": m_info.get("student_name", "Unknown") if m_info else "Unknown",
+            "faculty": m_info.get("faculty", "") if m_info else "",
+            "course_year": m_info.get("course_year", "2022") if m_info else "2022",
+            "required_days": m_info.get("required_ctxh_days", 4.0) if m_info else 4.0,
+            "accumulated_days": 0.0,
+            "registered_activities": [],
+        }
+        data.append(student)
+    now_str = datetime.now().strftime("%Y%m%d")
+    short_id = uuid.uuid4().hex[:4].upper()
+    reg_id = f"REG-CTXH-{now_str}-{short_id}"
+    code_names = {
+        "001202": "Truc tiep hien mau tinh nguyen (01 lan)",
+        "001201": "To chuc hoat dong hien mau tinh nguyen",
+        "001101": "Mua he xanh - Suot chien dich tai tinh (01 thang)",
+        "001104": "Mua he xanh - Doi hinh chuyen 02 tuan",
+        "001105": "Mua he xanh - Doi hinh chuyen 01 tuan",
+        "001301": "Xuan tinh nguyen (04 ngay)",
+        "001401": "Dem hoi trang ram (04 ngay)",
+        "001501": "Tiep suc mua thi - Cap thanh (01 thang)",
+        "001502": "Tiep suc mua thi - Cap truong (02 tuan)",
+        "002101": "Ngay chu nhat xanh (01 buoi)",
+        "002102": "Ngay chu nhat xanh (01 ngay)",
+    }
+    if not activity_name:
+        activity_name = code_names.get(activity_code, f"Hoat dong CTXH ma {activity_code}")
+    new_reg = {
+        "reg_id": reg_id,
+        "activity_code": activity_code,
+        "activity_name": activity_name,
+        "points": points,
+        "converted_days": converted_days,
+        "status": "CONFIRMED",
+        "registration_date": datetime.now().strftime("%Y-%m-%d"),
+        "note": note or "Dang ky thanh cong qua Tro ly CTXH",
+    }
+    student.setdefault("registered_activities", []).append(new_reg)
+    student["accumulated_days"] = round(student.get("accumulated_days", 0.0) + converted_days, 2)
+    _save_student_ctxh(data)
+    return (
+        f"Dang ky hoat dong thanh cong! Ma dang ky: {reg_id}. "
+        f"Sinh vien: {student.get('student_name', 'Unknown')} (MSSV: {mssv}). "
+        f"Hoat dong: {activity_name} (Ma: {activity_code}) | Diem: {points} | Ngay quy doi: +{converted_days}. "
+        f"Tong ngay tich luy moi: {student['accumulated_days']}/{student.get('required_days', 4.0)} ngay. "
+        f"Hay goi ngay get_ctxh_status('{mssv}') de kiem tra xac thuc."
+    )
+
+
+# Alias for compatibility with general prompt
+@mcp.tool()
+def submit_academic_request(
+    mssv: str,
+    student_name: str,
+    request_type: str,
+    course_name: str = "",
+    exam_date: str = "",
+    submission_date: str = "",
+    reason: str = "",
+    attachment: str = "",
+) -> str:
+    """[WRITE TOOL - ALIAS] Ho tro dang ky hoat dong CTXH qua interface chung."""
+    return register_ctxh_activity(
+        mssv=mssv,
+        activity_code="001202",
+        activity_name=f"Dang ky CTXH: {request_type}",
+        points=5,
+        converted_days=0.5,
+        note=f"{reason} (Minh chung: {attachment})",
+    )
+
+
+@mcp.tool()
+def get_ctxh_status(mssv: str) -> str:
+    """[VERIFY READ TOOL] Kiem tra va xac thuc ho so CTXH thuc te cua sinh vien tu he thong du lieu.
+    Tra ve thong tin: MSSV, Ho ten, Khoa, So ngay tich luy, So ngay quy dinh tot nghiep, Tien do va Danh sach hoat dong da tham gia."""
+    data = _load_student_ctxh()
+    student = None
+    for s in data:
+        if s.get("mssv") == mssv:
+            student = s
+            break
+
+    if not student:
+        return f"Loi xac thuc: Khong tim thay ho so sinh vien co MSSV '{mssv}' trong he thong."
+
+    acc = student.get("accumulated_days", 0.0)
+    req = student.get("required_days", 4.0)
+    diff = round(req - acc, 2)
+    progress_status = "DA DU DIEU KIEN TOT NGHIEP" if acc >= req else f"CON THIEU {diff} NGAY DE DU DIEU KIEN TOT NGHIEP"
+
+    activities = student.get("registered_activities", [])
+    total_points = sum(a.get("points", 0) for a in activities)
+
+    act_lines = []
+    for a in activities:
+        act_lines.append(
+            f"  - [{a.get('reg_id')}] Ma: {a.get('activity_code')} | "
+            f"Ten: {a.get('activity_name')} | "
+            f"Diem: {a.get('points', 0)} diem | "
+            f"Ngay quy doi: {a.get('converted_days')} ngay | "
+            f"Trang thai: {a.get('status')}"
+        )
+
+    acts_text = "\n".join(act_lines) if act_lines else "  (Chua co hoat dong nao)"
+
+    return (
+        f"[XAC THUC HO SO CTXH THANH CONG]\n"
+        f"- MSSV: {student.get('mssv')} | Sinh vien: {student.get('student_name')}\n"
+        f"- Khoa: {student.get('faculty', 'N/A')} | Khoa hoc: {student.get('course_year', 'N/A')}\n"
+        f"- Tong diem CTXH tich luy: {total_points} diem\n"
+        f"- So ngay tich luy hien tai: {acc} ngay (Quy doi tu tong diem chia 10)\n"
+        f"- So ngay toi thieu de tot nghiep: {req} ngay\n"
+        f"- Danh gia tien do: {progress_status}\n"
+        f"- Danh sach hoat dong da ghi nhan:\n{acts_text}"
+    )
+
+
+# Alias for verify tool
+@mcp.tool()
+def get_request_status(request_id: str) -> str:
+    """[VERIFY READ TOOL - ALIAS] Kiem tra trang thai ho so theo MSSV hoac ma dang ky."""
+    # If passed MSSV directly
+    data = _load_student_ctxh()
+    for s in data:
+        if s.get("mssv") == request_id:
+            return get_ctxh_status(request_id)
+        for act in s.get("registered_activities", []):
+            if act.get("reg_id") == request_id:
+                return get_ctxh_status(s.get("mssv"))
+    return f"Loi xac thuc: Khong tim thay ma ho so hoac sinh vien voi ma '{request_id}'."
+
+
+@mcp.tool()
 def sync_ctxh_activities() -> str:
     try:
         result = sync_ctxh_from_file()
@@ -1138,9 +1391,8 @@ def export_ctxh_rules_json() -> str:
         return f"[CTXH RULES - TRONG] {result['message']}"
     else:
         return f"[CTXH RULES - LOI] {result.get('message', 'Loi khong xac dinh.')}"
-    
-    
-    
+
+
 @mcp.tool()
 def sync_documents() -> str:
     """Dong bo hoa va quet lai thu muc data/ de cap nhat cac file quy dinh CTXH, CSDL sinh vien tu Excel, hoat dong CTXH, va file activities.json."""
@@ -1196,3 +1448,4 @@ def sync_documents() -> str:
 
 if __name__ == "__main__":
     mcp.run(transport="stdio")
+
