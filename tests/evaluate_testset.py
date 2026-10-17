@@ -1,18 +1,27 @@
 """
-Evaluation script for RAG Student Regulations Assistant (Week 5).
-Measures:
-1. Calibration / Refusal Rate for 'no_answer' out-of-domain questions.
-2. Grounding & Faithfulness using LLM-as-a-judge.
-3. Average token usage and latency.
+Evaluation script for RAG Student Regulations Assistant (Week 5 & Week 7).
+Kiến trúc đồng bộ hoàn toàn với rag_client.py:
+- Kết nối MCP Server qua stdio một lần duy nhất cho toàn bộ phiên benchmark.
+- Khám phá công cụ động (Dynamic Tool Discovery) và lọc công cụ quản trị tương tự rag_client.
+- Chạy từng câu hỏi từ tập testset.jsonl qua run_agent_loop.
+- Phân luồng ghi log riêng vào logs/eval/ (evaluation.log, run_eval_{session_id}.jsonl, eval_report.csv, eval_report.json).
+- Đo lường bộ 4 chỉ số:
+  1. Calibration / Refusal Rate cho câu out-of-domain (is_no_answer).
+  2. Faithfulness (LLM-as-a-judge phân tách mệnh đề nguyên tử).
+  3. Answer Relevance (mức độ bám sát trọng tâm câu hỏi).
+  4. Context Precision (đánh giá xếp hạng từng chunk hữu ích).
 
 Run using: uv run python tests/evaluate_testset.py
+Hoặc chạy thử số câu: uv run python tests/evaluate_testset.py --limit 3
 """
 
 import asyncio
 import json
 import os
+import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from groq import Groq
@@ -39,6 +48,7 @@ from src.evaluation import (
     generate_session_charts,
     save_comparison_csv,
     generate_comparison_chart,
+    SessionTracker,
 )
 
 load_dotenv()
@@ -48,18 +58,64 @@ EVAL_DIR = _ROOT / "logs" / "eval"
 EVAL_RESULTS_FILE = EVAL_DIR / "eval_report.json"
 
 
+class TeeLogger:
+    """Tự động nhân bản toàn bộ luồng stdout ra cả màn hình terminal và file log riêng."""
+
+    def __init__(self, filepath: Path, original_stream):
+        self.original_stream = original_stream
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        self.file = open(filepath, "w", encoding="utf-8")
+
+    def write(self, text):
+        self.original_stream.write(text)
+        self.file.write(text)
+        self.file.flush()
+
+    def flush(self):
+        self.original_stream.flush()
+        self.file.flush()
+
+    def close(self):
+        try:
+            self.file.close()
+        except Exception:
+            pass
+
+
 async def evaluate_all():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         print("[Loi] Chua tim thay GROQ_API_KEY trong file .env")
         return
 
-    groq_client = Groq(api_key=api_key)
+    groq_client = Groq(api_key=api_key, max_retries=0)
     system_prompt = load_system_prompt()
     evaluator = FaithfulnessEvaluator(groq_client=groq_client)
 
+    EVAL_DIR.mkdir(parents=True, exist_ok=True)
+    session_id = f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    eval_tracker = SessionTracker(logs_dir=EVAL_DIR, session_id=session_id)
+    eval_log_path = EVAL_DIR / "evaluation.log"
+
+    # Chuyển hướng stdout để lưu log riêng biệt ra file
+    original_stdout = sys.stdout
+    tee = TeeLogger(eval_log_path, original_stdout)
+    sys.stdout = tee
+
+    # Sao lưu student_activities.json de bao ve va reset sau khi eval (tranh dinh loi trung lap o q7)
+    activities_file = _ROOT / "data" / "student_activities.json"
+    activities_backup = None
+    if activities_file.exists():
+        try:
+            with open(activities_file, "r", encoding="utf-8") as f:
+                activities_backup = f.read()
+        except Exception:
+            pass
+
     if not TESTSET_FILE.exists():
         print(f"[Loi] Khong tim thay tap kiem thu {TESTSET_FILE}")
+        sys.stdout = original_stdout
+        tee.close()
         return
 
     testcases = []
@@ -69,8 +125,21 @@ async def evaluate_all():
             if line:
                 testcases.append(json.loads(line))
 
+    # Hỗ trợ tham số dòng lệnh --limit hoặc biến môi trường EVAL_LIMIT để test nhanh
+    limit = int(os.getenv("EVAL_LIMIT", 0))
+    for i, arg in enumerate(sys.argv):
+        if arg == "--limit" and i + 1 < len(sys.argv):
+            try:
+                limit = int(sys.argv[i + 1])
+            except ValueError:
+                pass
+    if limit > 0:
+        testcases = testcases[:limit]
+
     print("=" * 65)
-    print(f"[DANH GIA HE THONG] BAT DAU DANH GIA {len(testcases)} CAU HOI KIEM THU (WEEK 5)")
+    print(f"[DANH GIA HE THONG] BAT DAU DANH GIA {len(testcases)} CAU HOI KIEM THU (WEEK 5 & WEEK 7)")
+    print(f"Log van ban rieng : {eval_log_path}")
+    print(f"Log telemetry jsonl: {EVAL_DIR / f'run_{session_id}.jsonl'}")
     print("=" * 65)
 
     results = []
@@ -82,157 +151,226 @@ async def evaluate_all():
     total_prompt_tokens = 0
     total_completion_tokens = 0
 
-    # Chay tung testcase voi ClientSession de dam bao stdio doc lap, khong bao gio bi treo
-    for idx, tc in enumerate(testcases, 1):
-        qid = tc["id"]
-        query = tc["query"]
-        is_no_ans = tc["is_no_answer"]
-        cat = tc["category"]
+    try:
+        # KẾT NỐI MCP SERVER 1 LẦN DUY NHẤT (Cấu trúc tương đồng hoàn toàn với rag_client.py)
+        async with stdio_client(SERVER_PARAMS) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
 
-        print(f"\n[{idx}/{len(testcases)}] Dang xu ly cau hoi [{qid}] ({cat}):")
-        print(f"    Cau hoi: \"{query}\"")
+                # Dynamic tool discovery (MCP Specification Week 7)
+                mcp_tools = (await session.list_tools()).tools
+                EXCLUDED_LLM_TOOLS = {
+                    "list_indexed_documents",
+                    "get_document_full",
+                    "sync_ctxh_activities",
+                    "export_ctxh_rules_json",
+                    "sync_documents",
+                    "check_graduation_eligibility",
+                }
+                groq_tools = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.input_schema,
+                        },
+                    }
+                    for t in mcp_tools
+                    if t.name not in EXCLUDED_LLM_TOOLS
+                ]
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": query},
-        ]
+                print("[THANH CONG] Da ket noi MCP Server cho phien danh gia benchmark!")
+                print(f"Cac cong cu agent duoc phep su dung ({len(groq_tools)}): {', '.join([t['function']['name'] for t in groq_tools])}")
+                print("=" * 65)
 
-        start_t = time.time()
-        try:
-            async with stdio_client(SERVER_PARAMS) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    mcp_tools = (await session.list_tools()).tools
-                    groq_tools = [
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": t.name,
-                                "description": t.description,
-                                "parameters": t.input_schema,
-                            },
-                        }
-                        for t in mcp_tools
+                # Chay tung testcase trong tap kiem thu voi session persistent
+                for idx, tc in enumerate(testcases, 1):
+                    qid = tc["id"]
+                    query = tc["query"]
+                    is_no_ans = tc["is_no_answer"]
+                    cat = tc["category"]
+
+                    print(f"\n[{idx}/{len(testcases)}] Dang xu ly cau hoi [{qid}] ({cat}):")
+                    print(f"    Cau hoi: \"{query}\"")
+
+                    # Moi cau hoi khoi tao lai hoi thoai rieng biet tranh phinh to context window
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": query},
                     ]
 
-                    answer, context, usage = await run_agent_loop(
-                        session=session,
-                        groq_client=groq_client,
-                        groq_tools=groq_tools,
-                        messages=messages,
-                        user_query=query,
+                    start_t = time.time()
+                    try:
+                        answer, context, usage = await run_agent_loop(
+                            session=session,
+                            groq_client=groq_client,
+                            groq_tools=groq_tools,
+                            messages=messages,
+                            user_query=query,
+                            tracker=eval_tracker,
+                        )
+                    except (Exception, BaseException) as e:
+                        if isinstance(e, KeyboardInterrupt):
+                            raise
+                        print(f"    [Loi phien] {e}")
+                        answer = f"Loi he thong: {e}"
+                        context = ""
+                        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+                    duration = time.time() - start_t
+                    total_prompt_tokens += usage.get("prompt_tokens", 0)
+                    total_completion_tokens += usage.get("completion_tokens", 0)
+
+                    # Kiem tra xem co phai loi ha tang mang / rate-limit hay khong
+                    is_infra_error = (
+                        answer.startswith("Error: Loi ket noi LLM")
+                        or "429" in answer
+                        or "413" in answer
+                        or "Loi he thong:" in answer
                     )
-        except (Exception, BaseException) as e:
-            if isinstance(e, KeyboardInterrupt):
-                raise
-            print(f"    [Loi phien] {e}")
-            answer = f"Loi he thong: {e}"
-            context = ""
-            usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
-        duration = time.time() - start_t
-        total_prompt_tokens += usage.get("prompt_tokens", 0)
-        total_completion_tokens += usage.get("completion_tokens", 0)
+                    # Danh gia Calibration cho cau hoi ngoai pham vi (no_answer)
+                    is_refused = False
+                    refusal_keywords = [
+                        "không có trong", "không có quy định", "không có thông tin", 
+                        "quy định này không có", "không tìm thấy", "từ chối", "không thuộc", 
+                        "không nằm trong", "chưa có quy định", "không áp dụng", "không quy định",
+                        "không phải câu hỏi", "ngoài phạm vi", "chỉ hỗ trợ giải đáp quy định",
+                        "không tồn tại trong cơ sở dữ liệu", "không tồn tại trong hệ thống"
+                    ]
+                    answer_lower = answer.lower()
+                    if any(kw in answer_lower for kw in refusal_keywords):
+                        is_refused = True
 
-        # Danh gia Calibration cho cau hoi ngoai pham vi (no_answer)
-        is_refused = False
-        refusal_keywords = [
-            "không có trong", "không có quy định", "không có thông tin", 
-            "quy định này không có", "không tìm thấy", "từ chối", "không thuộc", 
-            "không nằm trong", "chưa có quy định", "không áp dụng", "không quy định",
-            "không phải câu hỏi", "ngoài phạm vi", "chỉ hỗ trợ giải đáp quy định",
-            "không tồn tại trong cơ sở dữ liệu", "không tồn tại trong hệ thống"
-        ]
-        answer_lower = answer.lower()
-        if any(kw in answer_lower for kw in refusal_keywords):
-            is_refused = True
+                    if is_no_ans:
+                        no_answer_total += 1
+                        if is_refused:
+                            no_answer_refused_correctly += 1
+                            print("    -> [CALIBRATION] Tu choi chinh xac!")
+                        else:
+                            print("    -> [CALIBRATION] Canh bao: Khong tu choi cau hoi ngoai pham vi!")
 
-        if is_no_ans:
-            no_answer_total += 1
-            if is_refused:
-                no_answer_refused_correctly += 1
-                print("    -> [CALIBRATION] Tu choi chinh xac!")
-            else:
-                print("    -> [CALIBRATION] Canh bao: Khong tu choi cau hoi ngoai pham vi!")
+                    # Kiem tra trich dan nguon (Grounding Citation: ho tro ca Chunk ID va Ma hoat dong)
+                    has_citation = (
+                        ("[nguồn:" in answer_lower or "[nguon:" in answer_lower)
+                        and ("chunk id:" in answer_lower or "mã hoạt động:" in answer_lower or "ma hoat dong:" in answer_lower)
+                    )
+                    cids_cited = re.findall(r"chunk\s*id[:\s]+([a-zA-Z0-9_\-\.]+)", answer, re.IGNORECASE)
+                    cid_grounded = any(cid in context for cid in cids_cited) if cids_cited else has_citation
 
-        # Kiem tra trich dan nguon (Grounding Citation)
-        has_citation = ("[nguồn:" in answer.lower() or "[nguon:" in answer.lower()) and "chunk id:" in answer.lower()
+                    # Danh gia bo 3 chi so Week 5: Faithfulness, Answer Relevance, Context Precision
+                    f_score = None
+                    rel_score = None
+                    prec_score = None
 
-        # Danh gia bo 3 chi so Week 5: Faithfulness, Answer Relevance, Context Precision
-        f_score = 1.0
-        rel_score = 1.0
-        prec_score = 1.0
+                    if is_infra_error:
+                        print("    -> [HA TANG] Lỗi kết nối mạng/quota LLM (ERROR), bỏ qua tính điểm chất lượng.")
+                    elif not is_no_ans:
+                        # Answer Relevance: Danh gia muc do giai quyet dung trong tam cau hoi (khong phu thuoc context)
+                        rel_score = check_answer_relevance(query, answer, groq_client=groq_client)
+                        if rel_score is not None:
+                            relevance_scores.append(rel_score)
 
-        if not is_no_ans:
-            # Answer Relevance: Danh gia muc do giai quyet dung trong tam cau hoi (khong phu thuoc context)
-            rel_score = check_answer_relevance(query, answer, groq_client=groq_client)
-            relevance_scores.append(rel_score)
+                        # Faithfulness: Tach menh de nguyen tu va doi chieu context
+                        if context.strip():
+                            try:
+                                report = evaluator.evaluate(answer, context)
+                                f_score = report.score
+                            except Exception:
+                                f_score = None
+                            if f_score is not None:
+                                faithfulness_scores.append(f_score)
 
-            # Faithfulness: Tach menh de nguyen tu va doi chieu context
-            if context.strip():
-                try:
-                    report = evaluator.evaluate(answer, context)
-                    f_score = report.score
-                except Exception:
-                    f_score = 1.0
-                faithfulness_scores.append(f_score)
+                            # Context Precision: Xep hang chunk huu ich (tach thanh tung chunk rieng biet de danh gia Ranking)
+                            chunks_list = []
+                            for b in context.split("--- [Trich doan"):
+                                b_str = b.strip()
+                                if b_str:
+                                    chunks_list.append(b_str)
+                            if not chunks_list and context.strip():
+                                chunks_list = [context.strip()]
 
-                # Context Precision: Xep hang chunk huu ich
-                prec_score = check_context_precision(query, [context], groq_client=groq_client)
-                precision_scores.append(prec_score)
+                            prec_score = check_context_precision(query, chunks_list, groq_client=groq_client)
+                            if prec_score is not None:
+                                precision_scores.append(prec_score)
 
-                print(f"    -> [WEEK 5] Faithfulness: {f_score:.2f} | Relevance: {rel_score:.2f} | Precision: {prec_score:.2f}")
-            else:
-                f_score = 0.0
-                prec_score = 0.0
-                faithfulness_scores.append(f_score)
-                precision_scores.append(prec_score)
-                print(f"    -> [WEEK 5] Khong co context: Faithfulness={f_score:.2f} | Relevance={rel_score:.2f}")
-        else:
-            relevance_scores.append(1.0)
-            precision_scores.append(1.0)
-            print(f"    -> [WEEK 5] Cau out-of-domain: Calibration Pass.")
+                            f_str = f"{f_score:.2f}" if f_score is not None else "None"
+                            r_str = f"{rel_score:.2f}" if rel_score is not None else "None"
+                            p_str = f"{prec_score:.2f}" if prec_score is not None else "None"
+                            print(f"    -> [WEEK 5] Faithfulness: {f_str} | Relevance: {r_str} | Precision: {p_str}")
+                        else:
+                            f_score = None
+                            prec_score = None
+                            r_str = f"{rel_score:.2f}" if rel_score is not None else "None"
+                            print(f"    -> [WEEK 5] Khong co context: Faithfulness=N/A | Relevance={r_str}")
+                    else:
+                        print(f"    -> [WEEK 5] Cau out-of-domain: Calibration Pass.")
 
-        calls = usage.get("api_calls", 1)
-        p_tokens = usage.get("prompt_tokens", 0)
-        c_tokens = usage.get("completion_tokens", 0)
-        m_prompt = usage.get("max_prompt", p_tokens)
-        tot_tok = usage.get("total_tokens", p_tokens + c_tokens)
+                    calls = usage.get("api_calls", 1)
+                    p_tokens = usage.get("prompt_tokens", 0)
+                    c_tokens = usage.get("completion_tokens", 0)
+                    m_prompt = usage.get("max_prompt", p_tokens)
+                    tot_tok = usage.get("total_tokens", p_tokens + c_tokens)
 
-        print(f"    -> [USAGE] Calls: {calls} | Prompt: {p_tokens} | Completion: {c_tokens} | Max Prompt: {m_prompt} | Total: {tot_tok}")
-        print(f"    -> [DANH GIA] Trich dan nguon hop le: {has_citation}")
+                    print(f"    -> [USAGE] Calls: {calls} | Prompt: {p_tokens} | Completion: {c_tokens} | Max Prompt: {m_prompt} | Total: {tot_tok}")
+                    print(f"    -> [DANH GIA] Trich dan nguon hop le: {has_citation} (Xac thuc Chunk ID: {cid_grounded})")
 
-        results.append({
-            "id": qid,
-            "category": cat,
-            "query": query,
-            "ground_truth": tc.get("ground_truth", ""),
-            "is_no_answer": is_no_ans,
-            "is_refused": is_refused,
-            "has_citation": has_citation,
-            "faithfulness_score": f_score,
-            "answer_relevance": rel_score,
-            "context_precision": prec_score,
-            "duration_seconds": round(duration, 2),
-            "usage": {
-                "calls": calls,
-                "prompt_tokens": p_tokens,
-                "completion_tokens": c_tokens,
-                "max_prompt": m_prompt,
-                "total_tokens": tot_tok,
-            },
-            "answer_preview": answer[:150],
-        })
+                    results.append({
+                        "id": qid,
+                        "category": cat,
+                        "query": query,
+                        "ground_truth": tc.get("ground_truth", ""),
+                        "is_no_answer": is_no_ans,
+                        "is_refused": is_refused,
+                        "has_citation": has_citation,
+                        "faithfulness_score": f_score,
+                        "answer_relevance": rel_score,
+                        "context_precision": prec_score,
+                        "duration_seconds": round(duration, 2),
+                        "usage": {
+                            "calls": calls,
+                            "prompt_tokens": p_tokens,
+                            "completion_tokens": c_tokens,
+                            "max_prompt": m_prompt,
+                            "total_tokens": tot_tok,
+                        },
+                        "answer_preview": answer[:150],
+                    })
 
-        # Nghỉ giữa các câu để tránh rate limit Groq free tier
-        time.sleep(2.0)
+                    # Ghi nhan lượt vào SessionTracker de xuat CSV / telemetry
+                    eval_tracker.record_turn(
+                        query=query,
+                        answer=answer,
+                        duration=duration,
+                        usage=usage,
+                        category=cat,
+                        faithfulness_score=f_score,
+                        keyword_recall=1.0 if (not is_no_ans and has_citation) else None,
+                        is_no_answer=is_no_ans,
+                        is_refused=is_refused,
+                    )
+
+                    # Nghỉ giữa các câu dựa trên tổng token đã dùng để bảo toàn quota Groq (7000 TPM)
+                    adaptive_sleep = max(4.0, (tot_tok / 6500.0) * 60.0)
+                    print(f"    -> [RATE LIMIT PACING] Nghi {adaptive_sleep:.1f}s de phuc hoi quota Groq TPM...")
+                    time.sleep(adaptive_sleep)
+
+    finally:
+        # Khoi phuc lai du lieu student_activities.json sau khi hoan tat cac cau hoi
+        if activities_backup is not None and activities_file.exists():
+            try:
+                with open(activities_file, "w", encoding="utf-8") as f:
+                    f.write(activities_backup)
+            except Exception:
+                pass
 
     # Tinh toan tong the
     refusal_rate = (no_answer_refused_correctly / no_answer_total * 100) if no_answer_total > 0 else 0
-    avg_faithfulness = (sum(faithfulness_scores) / len(faithfulness_scores)) if faithfulness_scores else 1.0
-    avg_relevance = (sum(relevance_scores) / len(relevance_scores)) if relevance_scores else 1.0
-    avg_precision = (sum(precision_scores) / len(precision_scores)) if precision_scores else 1.0
-    avg_tokens = (total_prompt_tokens + total_completion_tokens) / len(testcases)
+    avg_faithfulness = (sum(faithfulness_scores) / len(faithfulness_scores)) if faithfulness_scores else None
+    avg_relevance = (sum(relevance_scores) / len(relevance_scores)) if relevance_scores else None
+    avg_precision = (sum(precision_scores) / len(precision_scores)) if precision_scores else None
+    avg_tokens = (total_prompt_tokens + total_completion_tokens) / len(testcases) if testcases else 0
 
     diagnosis = diagnose_failure_mode(avg_faithfulness, avg_relevance, avg_precision)
 
@@ -240,9 +378,9 @@ async def evaluate_all():
         "total_testcases": len(testcases),
         "no_answer_testcases": no_answer_total,
         "refusal_rate_percent": round(refusal_rate, 2),
-        "average_faithfulness": round(avg_faithfulness, 2),
-        "average_answer_relevance": round(avg_relevance, 2),
-        "average_context_precision": round(avg_precision, 2),
+        "average_faithfulness": round(avg_faithfulness, 2) if avg_faithfulness is not None else None,
+        "average_answer_relevance": round(avg_relevance, 2) if avg_relevance is not None else None,
+        "average_context_precision": round(avg_precision, 2) if avg_precision is not None else None,
         "average_tokens_per_query": round(avg_tokens, 1),
         "total_prompt_tokens": total_prompt_tokens,
         "total_completion_tokens": total_completion_tokens,
@@ -257,7 +395,7 @@ async def evaluate_all():
     # Xuat file CSV chi tiet tung cau (+1 diem cong theo Muc 3 tai lieu 02)
     csv_file = EVAL_DIR / "eval_report.csv"
     save_session_csv(results, csv_file)
-    print(f"- File CSV chi tiet: {csv_file}")
+    print(f"\n- File CSV chi tiet: {csv_file}")
 
     # Tu dong sinh do thi PNG (DPI 300) de chen vao bao cao docx (+1 diem cong)
     charts_dir = EVAL_DIR / "charts"
@@ -270,14 +408,18 @@ async def evaluate_all():
     )
     print(f"- Thu muc do thi (PNG DPI 300): {charts_dir}")
 
+    faith_disp = f"{avg_faithfulness:.2f}/1.0" if avg_faithfulness is not None else "N/A"
+    rel_disp = f"{avg_relevance:.2f}/1.0" if avg_relevance is not None else "N/A"
+    prec_disp = f"{avg_precision:.2f}/1.0" if avg_precision is not None else "N/A"
+
     print("\n" + "=" * 65)
     print("[TONG KET EVALUATION (WEEK 5 METRICS)]")
     print(f"- Tong so cau test: {len(testcases)}")
     print(f"- So cau hoi ngoai pham vi (no_answer): {no_answer_total}")
     print(f"- Ty le tu choi dung (Calibration / Refusal): {refusal_rate:.1f}%")
-    print(f"- 1. Faithfulness (Groundedness)            : {avg_faithfulness:.2f}/1.0")
-    print(f"- 2. Answer Relevance (On-topic)            : {avg_relevance:.2f}/1.0")
-    print(f"- 3. Context Precision (Rank quality)       : {avg_precision:.2f}/1.0")
+    print(f"- 1. Faithfulness (Groundedness)            : {faith_disp}")
+    print(f"- 2. Answer Relevance (On-topic)            : {rel_disp}")
+    print(f"- 3. Context Precision (Rank quality)       : {prec_disp}")
     print(f"- Luong token trung binh / cau              : {avg_tokens:.1f} tokens")
     print("-" * 65)
     print(f"[CHAN DOAN HE THONG (SLIDE 12 & 13)]")
@@ -287,6 +429,11 @@ async def evaluate_all():
 
     # Chạy tự động so sánh cấu hình bổ sung (+1 điểm cộng theo hướng dẫn)
     run_configuration_comparison(STORE, EVAL_DIR, charts_dir)
+
+    # Khoi phuc lai luong stdout
+    sys.stdout = original_stdout
+    tee.close()
+    print(f"\n[HOÀN TẤT] Quá trình đánh giá đã kết thúc. Toàn bộ log đã được lưu tại: {eval_log_path}")
 
 
 def run_configuration_comparison(store, eval_dir: Path, charts_dir: Path) -> list[dict]:
@@ -337,18 +484,20 @@ def run_configuration_comparison(store, eval_dir: Path, charts_dir: Path) -> lis
         d_content = d_chunk.content.lower() if d_chunk else ""
         h_content = h_chunk.content.lower() if h_chunk else ""
 
-        d_hit = any(kw.lower() in d_content for kw in tc["check_kw"])
-        h_hit = any(kw.lower() in h_content for kw in tc["check_kw"])
+        d_hit = all(kw.lower() in d_content for kw in tc["check_kw"])
+        h_hit = all(kw.lower() in h_content for kw in tc["check_kw"])
 
         d_cid = d_chunk.chunk_id if d_chunk else "None"
         h_cid = h_chunk.chunk_id if h_chunk else "None"
 
         if h_hit and not d_hit:
-            winner = "Hybrid (Bắt đúng mã số)"
-        elif h_score > d_score and h_hit:
-            winner = "Hybrid (Tương đồng cao hơn)"
+            winner = "Hybrid (BM25 bắt đúng từ khóa)"
+        elif d_hit and not h_hit:
+            winner = "Dense"
+        elif h_hit and d_hit:
+            winner = "Tương đương" if abs(h_score - d_score) < 0.05 else ("Hybrid" if h_score > d_score else "Dense")
         else:
-            winner = "Tương đương"
+            winner = "Không khớp"
 
         records.append({
             "id": tc["id"],

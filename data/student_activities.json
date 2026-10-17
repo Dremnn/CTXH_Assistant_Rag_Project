@@ -5,19 +5,8 @@
     "faculty": "Công nghệ May & Thời trang",
     "course_year": "2023",
     "required_days": 2.0,
-    "accumulated_days": 3.0,
-    "registered_activities": [
-      {
-        "reg_id": "REG-CTXH-20261017-F167",
-        "activity_code": "001101",
-        "activity_name": "Tham gia trọn chiến dịch Mùa hè xanh tại địa bàn khó khăn (01 tháng)",
-        "points": 5,
-        "converted_days": 3.0,
-        "status": "CONFIRMED",
-        "registration_date": "2026-10-17",
-        "note": "Dang ky thanh cong qua Tro ly CTXH"
-      }
-    ]
+    "accumulated_days": 4.0,
+    "registered_activities": []
   },
   {
     "mssv": "23110112",
