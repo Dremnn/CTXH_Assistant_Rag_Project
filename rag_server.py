@@ -1071,15 +1071,7 @@ def search_ctxh_rules(
     top_k: int = 3,
     year: Optional[str] = None,
 ) -> str:
-    """Tra cuu van ban quy dinh Cong tac xa hoi (CTXH) bang Hybrid Search (BM25 + Dense Vector).
-    Tra ve cac dieu khoan, ma hoat dong (6 chu so), thang diem, cach quy doi ngay CTXH, va dieu kien tot nghiep.
-    Bat buoc goi cong cu nay khi tra cuu ma hoat dong, quy dinh ngay CTXH hoac tieu chuan mien giam.
-
-    Args:
-        query: Tu khoa, ma hoat dong (001101, 001202...), hoac cau hoi can tra cuu quy dinh CTXH.
-        top_k: So luong trich doan can lay (mac dinh 3, toi da 6).
-        year: Nam ban hanh quy dinh cu the (vi du '2023', '2024', '2025'). Neu de trong, he thong tu dong uu tien ban moi nhat.
-    """
+    """Tra cuu quy dinh CTXH HCMUTE (dieu khoan, thang diem, quy doi ngay, che tai, mien giam)."""
     mode = os.getenv("SEARCH_MODE", "hybrid")
     top_k = max(1, min(top_k, 6))
     results = STORE.search(query=query, top_k=top_k, mode=mode, year=year)
@@ -1124,10 +1116,7 @@ def search_ctxh_rules(
 
 @mcp.tool()
 def get_activity(code_or_name: str) -> str:
-    """[READ TOOL] Tra cuu danh muc hoat dong CTXH chinh xac theo ma 6 chu so hoac tu khoa ten hoat dong tu bang quy che.
-    Tra ve ma hoat dong, ten day du, linh vuc, thang diem chuan, va so ngay quy doi theo quy dinh kem trich dan nguon chuan.
-    Dac biet giup phan biet ro cac hoat dong de gay nham lan (vi du: to chuc hien mau 001201 vs truc tiep hien mau 001202).
-    """
+    """Tra cuu danh muc hoat dong CTXH chuan theo ma 6 chu so hoac tu khoa ten."""
     code_or_name = (code_or_name or "").strip()
     if not code_or_name:
         return "Error: Vui long cung cap ma hoat dong hoac tu khoa ten hoat dong can tra cuu."
@@ -1251,9 +1240,7 @@ def get_document_full(doc_id: str) -> str:
 
 @mcp.tool()
 def check_student_exists(mssv: str) -> str:
-    """[READ TOOL] Kiem tra thong tin sinh vien co ton tai trong he thong co so du lieu cua truong hay khong.
-    Tra ve Ho ten, Khoa, Khoa hoc, He dao tao, va so ngay CTXH tieu chuan de tot nghiep.
-    Bat buoc goi cong cu nay de xac minh danh tinh sinh vien truoc khi xu ly ho so hoac dang ky."""
+    """Xac minh MSSV co ton tai trong CSDL truong HCMUTE hay khong."""
     students = _load_students()
     for s in students:
         if s.get("mssv") == mssv:
@@ -1272,8 +1259,7 @@ def check_student_exists(mssv: str) -> str:
 
 @mcp.tool()
 def check_graduation_eligibility(mssv: str) -> str:
-    """[SYNTHESIS/CALCULATION TOOL] Tham dinh va tinh toan tien do tich luy ngay CTXH so voi chuan tot nghiep.
-    Tuong duong get_ctxh_status."""
+    """Tham dinh tien do tich luy ngay CTXH so voi chuan tot nghiep (tuong duong get_ctxh_status)."""
     return get_ctxh_status(mssv)
 
 
@@ -1284,10 +1270,7 @@ def register_ctxh_activity(
     points: Optional[int] = None,
     note: str = "",
 ) -> str:
-    """[WRITE TOOL - SIDE EFFECT] Dang ky hoat dong CTXH va ghi nhan vao ho so sinh vien trong he thong du lieu.
-    Tu dong kiem tra MSSV ton tai, kiem tra ma hoat dong hop le, kiem tra thang diem hop le theo quy che,
-    va kiem tra chong dang ky trung lap.
-    Bat buoc goi cong cu get_ctxh_status ngay sau khi goi tool nay de verify trang thai ho so."""
+    """Dang ky hoat dong CTXH cho sinh vien (kiem tra MSSV, ma, thang diem, chong trung). Bat buoc verify bang get_ctxh_status."""
     # 1. Kiem tra MSSV trong he thong goc
     students_master = _load_students()
     master_info = next((s for s in students_master if s.get("mssv") == mssv), None)
@@ -1412,10 +1395,7 @@ def convert_points_to_ctxh_days(total_points: float | int) -> float:
 
 @mcp.tool()
 def get_ctxh_status(mssv: str) -> str:
-    """[VERIFY READ TOOL] Kiem tra, doi chieu tien do va xac thuc ho so CTXH thuc te cua sinh vien.
-    Doi chieu giua ho so goc (students.json) va lich su hoat dong thuc te (student_activities.json).
-    Tra ve day du: Thong tin sinh vien, Tong diem tich luy, So ngay da quy doi, So ngay con thieu,
-    Ket luan tham dinh tot nghiep (DA DU / CHUA DU DIEU KIEN), va Danh sach hoat dong da ghi nhan."""
+    """Kiem tra tien do, tong diem, so ngay tich luy va xac thuc ho so CTXH cua sinh vien."""
     students_master = _load_students()
     master_info = next((s for s in students_master if s.get("mssv") == mssv), None)
 

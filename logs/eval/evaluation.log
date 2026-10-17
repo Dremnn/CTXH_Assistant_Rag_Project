@@ -1,0 +1,508 @@
+=================================================================
+[DANH GIA HE THONG] BAT DAU DANH GIA 15 CAU HOI KIEM THU (WEEK 5 & WEEK 7)
+Log van ban rieng : D:\UTE\AI Progarmming\CTXH_Assistant_Rag_Project\logs\eval\evaluation.log
+Log telemetry jsonl: D:\UTE\AI Progarmming\CTXH_Assistant_Rag_Project\logs\eval\run_eval_20261017_182435.jsonl
+=================================================================
+[THANH CONG] Da ket noi MCP Server cho phien danh gia benchmark!
+Cac cong cu agent duoc phep su dung (5): search_ctxh_rules, get_activity, check_student_exists, register_ctxh_activity, get_ctxh_status
+=================================================================
+
+[1/15] Dang xu ly cau hoi [q1] (logic_rules):
+    Cau hoi: "Mã hoạt động 'Trực tiếp hiến máu tình nguyện 01 lần' là mã gì và được quy đổi thành bao nhiêu ngày CTXH?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: Trực tiếp hiến máu tình nguyện 01 lần
+    -> Nhan phan hoi: 116 ky tu.
+
+[Hanh dong - Buoc 2] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: hiến máu
+    -> Nhan phan hoi: 827 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Hoạt động "Trực tiếp hiến máu tình nguyện 01 lần" trong danh mục chuẩn có tên đầy đủ **"Trực tiếp hiến máu toàn phần hoặc hiến tiểu cầu (01 lần)"** với thông tin như sau:
+    
+    - **Mã hoạt động:** 001201
+    - **Lĩnh vực:** Hiến máu cứu người
+    - **Thang điểm chuẩn:** 12 điểm
+    - **Quy đổi ngày CTXH:** **1,0 ngày** (Công thức: Điểm / 10 = Ngày CTXH → 12/10 ≈ 1,0 ngày)
+    
+    [Nguồn: 00_Toan_van_Quy_dinh_CTXH_2025.pdf | Phiên bản: 2025 | Mã hoạt động: 001201 | Chunk ID: 00_Toan_van_Quy_dinh_CTXH_2025_c008]
+    
+    Lưu ý: Nếu bạn đang tìm vai trò **Đội trưởng tình nguyện viên trạm hiến máu lưu động (01 đợt)** thì mã tương ứng là **001202** (12→24 điểm, quy đổi 1→2 ngày).
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 0.90 | Precision: 1.00
+    -> [USAGE] Calls: 3 | Prompt: 6523 | Completion: 323 | Max Prompt: 2478 | Total: 6846
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 63.2s de phuc hoi quota Groq TPM...
+
+[2/15] Dang xu ly cau hoi [q2] (logic_rules):
+    Cau hoi: "Sinh viên hệ chính quy khóa đào tạo từ 4 năm trở lên phải tích lũy tối thiểu bao nhiêu ngày công tác xã hội để đủ điều kiện tốt nghiệp?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "số ngày công tác xã hội tối thiểu để tốt nghiệp hệ chính quy khóa đào tạo từ 4 năm trở lên"
+    -> Nhan phan hoi: 2079 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Sinh viên **hệ chính quy, chương trình chuẩn (Đại trà), khóa đào tạo từ 4 năm trở lên** phải tích lũy **tối thiểu 06 ngày công tác xã hội** để đủ điều kiện tốt nghiệp.
+    
+    Lưu ý thêm: phải tích lũy đủ **100%** số ngày quy định **chậm nhất trước ngày xét công nhận tốt nghiệp 30 ngày**.
+    
+    (Theo chuẩn phân luồng 2025 — áp dụng cụ thể cho sinh viên khóa 2025.)
+    
+    [Nguồn: 00_Toan_van_Quy_dinh_CTXH_2025.pdf | Phiên bản: 2025 | Chunk ID: 00_Toan_van_Quy_dinh_CTXH_2025_c003]
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 0.90 | Precision: 1.00
+    -> [USAGE] Calls: 2 | Prompt: 4769 | Completion: 219 | Max Prompt: 2787 | Total: 4988
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 46.0s de phuc hoi quota Groq TPM...
+
+[3/15] Dang xu ly cau hoi [q3] (logic_rules):
+    Cau hoi: "Sinh viên đăng ký tham gia hoạt động CTXH nhưng không thực hiện nội dung đã đăng ký mà không có lý do chính đáng thì bị xử lý như thế nào?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "xử lý sinh viên đăng ký hoạt động CTXH nhưng không thực hiện không có lý do chính đáng"
+    -> Nhan phan hoi: 2006 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "chế tài vi phạm vắng mặt không lý do trừ ngày CTXH"
+    -> Nhan phan hoi: 2040 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Theo quy định CTXH hiện hành, khi sinh viên đã đăng ký tham gia hoạt động nhưng **không thực hiện nội dung đã đăng ký mà không có lý do chính đáng** (vắng mặt không lý do), hoặc **báo hủy muộn dưới 12 giờ**, mức xử lý như sau:
+    
+    - **Bị trừ 2,0 ngày CTXH.**
+    - **Đồng thời bị hạ 1 bậc Điểm rèn luyện** của học kỳ đó.
+    
+    Lưu ý: Trường hợp can thiệp gian lận công nghệ (Fake GPS, dùng tài khoản mượn) sẽ bị xử lý nặng hơn: hủy bỏ toàn bộ ngày CTXH tích lũy, đình chỉ học tập 01 học kỳ và ghi vào hồ sơ kỷ luật sinh viên. Tuy nhiên, đây là chế tài riêng cho hành vi gian lận, không áp dụng cho trường hợp chỉ vắng mặt không lý do.
+    
+    [Nguồn: 02_Phan_II_Noi_dung_va_Quy_doi_ngay_CTXH_2025.txt | Phiên bản: 2025 | Chunk ID: 02_Phan_II_Noi_dung_va_Quy_doi_ngay_CTXH_2025_c009]
+    [Nguồn: 00_Toan_van_Quy_dinh_CTXH_2025.pdf | Phiên bản: 2025 | Chunk ID: 00_Toan_van_Quy_dinh_CTXH_2025_c011]
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 0.90 | Precision: 0.89
+    -> [USAGE] Calls: 2 | Prompt: 5691 | Completion: 399 | Max Prompt: 3708 | Total: 6090
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 56.2s de phuc hoi quota Groq TPM...
+
+[4/15] Dang xu ly cau hoi [q4] (version_comparison):
+    Cau hoi: "So sánh yêu cầu tích lũy ngày CTXH tối thiểu giữa khóa 2012 và các khóa từ 2013 trở đi đối với chương trình đào tạo từ 4 năm trở lên có gì khác biệt?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "số ngày tích lũy CTXH tối thiểu tốt nghiệp theo khóa đào tạo chương trình đại học từ 4 năm trở lên"
+    -> Nhan phan hoi: 2079 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "ngưỡng ngày CTXH tối thiểu khóa 2012 so với khóa 2013 trở đi"
+    -> Nhan phan hoi: 2079 ky tu.
+
+[Hanh dong - Buoc 2] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "yêu cầu tích lũy ngày CTXH tối thiểu khóa 2012 chương trình đào tạo từ 4 năm"
+    -> Nhan phan hoi: 2079 ky tu.
+[Canh bao] Model qwen/qwen3.8-27b gap su co (Thu lan 1/5): Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m54sbswhexaa0er272p73wb2` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 5356, Requested 4409. Please try again in 23.7s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[Rate Limit 429] Cho 24.7 giay theo yeu cau cua Groq (Thu lan 1/5)...
+
+[Hanh dong - Buoc 3] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "quy định số ngày CTXH theo khóa nhập học khóa 2012 khóa 2013 ngưỡng tốt nghiệp áp dụng cho từng khóa"
+    -> Nhan phan hoi: 3356 ky tu.
+[Canh bao] Model qwen/qwen3.8-27b gap su co (Thu lan 1/5): Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m54sbswhexaa0er272p73wb2` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 6671, Requested 5704. Please try again in 46.071428571s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[Rate Limit 429] Cho 47.1 giay theo yeu cau cua Groq (Thu lan 1/5)...
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Mọi văn bản tôi tra cứu được trong hệ thống hiện hành đều là quy định CTXH phiên bản **2025**, áp dụng cho **sinh viên hệ chính quy trúng tuyển từ khóa 2025 trở đi** (khóa trước 2025 tiếp tục thực hiện theo quy định của chính khóa tương ứng).
+    
+    Trong các tài liệu truy vấn được, **không có quy định nêu mức tích lũy ngày CTXH tối thiểu chuyên cho khóa 2012 và các khóa từ 2013 trở đi** (mức "06–08 ngày" trong tài liệu 2025 là chuẩn áp dụng cho khóa 2025 trở đi, không phải mức của các khóa cũ). Do đó, tôi không thể xác nhận mức ngày quy định riêng cho từng khóa cũ và không so sánh mức cụ thể.
+    
+    Quy định này không có trong văn bản quy định Công tác xã hội hiện hành của trường.
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 0.00 | Precision: 0.00
+    -> [USAGE] Calls: 4 | Prompt: 15699 | Completion: 443 | Max Prompt: 5704 | Total: 16142
+    -> [DANH GIA] Trich dan nguon hop le: False (Xac thuc Chunk ID: False)
+    -> [RATE LIMIT PACING] Nghi 149.0s de phuc hoi quota Groq TPM...
+
+[5/15] Dang xu ly cau hoi [q5] (calculation):
+    Cau hoi: "Sinh viên tham gia Mùa hè xanh suốt chiến dịch 01 tháng tại tỉnh được đánh giá 40 điểm, và trực tiếp hiến máu tình nguyện 1 lần được 5 điểm. Hỏi tổng cộng sinh viên này quy đổi được bao nhiêu ngày CTXH?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "quy đổi ngày hoạt động CTXH từ điểm đánh giá 40 điểm chuỗi hoạt động Mùa hè xanh 01 tháng tổng số điểm quy đổi ngày"
+    -> Nhan phan hoi: 3560 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: Mùa hè xanh
+    -> Nhan phan hoi: 1964 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: hiến máu tình nguyện
+    -> Nhan phan hoi: 444 ky tu.
+
+[Hanh dong - Buoc 2] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: 001201
+    -> Nhan phan hoi: 438 ky tu.
+[Canh bao] Model qwen/qwen3.8-27b gap su co (Thu lan 1/5): Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m54sbswhexaa0er272p73wb2` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 6385, Requested 4924. Please try again in 36.934285714s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[Rate Limit 429] Cho 37.9 giay theo yeu cau cua Groq (Thu lan 1/5)...
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    **Đáp án: Tổng công sinh viên quy đổi được 5,0 ngày CTXH.**
+    
+    **Cách tính**
+    
+    1. **Mùa hè xanh tại địa bàn khó khăn (01 tháng) – mã 001101**
+       - Thang điểm chuẩn 36→72, quy đổi 3→6 ngày (công thức: Điểm / 10 = Ngày).
+       - Sinh viên được đánh giá 40 điểm → 40 / 10 = **4,0 ngày**.
+    
+    2. **Trực tiếp hiến máu 01 lần – mã 001201** (toàn phần/tiểu cầu)
+       - Standard 12 điểm, quy đổi 1,0 ngày (công thức: 12 / 10 = 1,0 ngày).
+       - **NHƯNG** sinh viên này chỉ được đánh giá **5 điểm** → 5 / 10 = **0,5 ngày** (5 điểm chưa đạt chuẩn 12 điểm, quy đổi trực tiếp theo điểm thực tế).
+    
+    3. **Tổng:** 4,0 + 0,5 = **5,0 ngày CTXH.**
+    
+    > Lưu ý: Nếu điểm hiến máu thực tế của sinh viên đạt chuẩn 12 điểm (thang chuẩn), tổng sẽ là 4,0 + 1,0 = **5,0 ngày**... ở đây sinh viên chỉ được 5 điểm nên quy đổi 0,5 ngày → vẫn bằng **5,0 ngày** theo cách trên. (Cần rà lại: 4,0 + 0,5 = 4,5 ngày. **Sửa: đáp án đúng là 4,5 ngày**).
+    
+    **Đáp án chính xác: 4,5 ngày CTXH** = 4,0 ngày (Mùa hè xanh, 40 điểm) + 0,5 ngày (hiến máu, 5 điểm theo thang chuẩn 12 điểm).
+    
+    **[Nguồn: 00_Toan_van_Quy_dinh_CTXH_2025.pdf | Phiên bản: 2025 | Mã hoạt động: 001101 | Chunk ID: 00_Toan_van_Quy_dinh_CTXH_2025_c007]**
+    **[Nguồn: 00_Toan_van_Quy_dinh_CTXH_2025.pdf | Phiên bản: 2025 | Mã hoạt động: 001201 | Chunk ID: 00_Toan_van_Quy_dinh_CTXH_2025_c008]**
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 0.57 | Relevance: 0.70 | Precision: 1.00
+    -> [USAGE] Calls: 3 | Prompt: 11593 | Completion: 750 | Max Prompt: 4924 | Total: 12343
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 113.9s de phuc hoi quota Groq TPM...
+
+[6/15] Dang xu ly cau hoi [q6] (calculation):
+    Cau hoi: "Một sinh viên có tổng cộng 35 điểm CTXH tích lũy trong suốt khóa học. Theo công thức quy đổi điểm thành ngày CTXH trước khi xét tốt nghiệp, sinh viên này được bao nhiêu ngày CTXH?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "công thức quy đổi điểm CTXH thành ngày CTXH xét tốt nghiệp"
+    -> Nhan phan hoi: 2039 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Áp dụng công thức quy đổi điểm xét tốt nghiệp (Chuẩn 2025): lấy tổng điểm CTXH tích lũy chia cho 12 và xử lý số dư.
+    
+    **Cách tính cho 35 điểm:**
+    - 35 ÷ 12 = **2** (phần nguyên) → 2 ngày CTXH trọn vẹn.
+    - Số dư = 35 − (2 × 12) = **11 điểm**.
+    - Số dư 11 điểm **trên 6 điểm** → làm tròn thành 12 điểm → quy đổi thêm **1 ngày CTXH** trọn vẹn.
+    
+    **Tổng:** 2 + 1 = **3 ngày CTXH**.
+    
+    > Lưu ý: Nếu sinh viên thuộc Chương trình chuẩn (≥4 năm) cần tối thiểu 06 ngày, Chương trình CLC/Tiên tiến/Tài năng cần 08 ngày, hoặc hệ dưới 4 năm/CĐ liên thông cần 04 ngày — với 3 ngày quy đổi sinh viên này sẽ **chưa đạt ngưỡng**, cần tích lũy thêm điểm CTXH.
+    
+    [Nguồn: 02_Phan_II_Noi_dung_va_Quy_doi_ngay_CTXH_2025.txt | Phiên bản: 2025 | Chunk ID: 02_Phan_II_Noi_dung_va_Quy_doi_ngay_CTXH_2025_c010]
+    [Nguồn: 01_Phan_I_Quy_dinh_chung_2025.pdf | Phiên bản: 2025 | Chunk ID: 01_Phan_I_Quy_dinh_chung_2025_c003]
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 0.90 | Precision: 1.00
+    -> [USAGE] Calls: 2 | Prompt: 4829 | Completion: 402 | Max Prompt: 2836 | Total: 5231
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 48.3s de phuc hoi quota Groq TPM...
+
+[7/15] Dang xu ly cau hoi [q7] (action_write_verify):
+    Cau hoi: "Tôi là sinh viên Trần Quốc Bảo, MSSV 23110234, khoa Công nghệ Thông tin. Tôi đã trực tiếp hiến máu toàn phần 1 lần (mã hoạt động 001201, 12 điểm, quy đổi 1.0 ngày). Hãy đăng ký ghi nhận hoạt động CTXH này vào hồ sơ cho tôi."
+
+[Hanh dong - Buoc 1] Goi cong cu: 'check_student_exists'
+    -> [THAM DINH HO SO] MSSV: 23110234
+    -> Nhan phan hoi: 234 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: 001201
+    -> Nhan phan hoi: 438 ky tu.
+
+[Hanh dong - Buoc 2] Goi cong cu: 'register_ctxh_activity'
+    -> [GHI DU LIEU] MSSV: 23110234 | Ma hoat dong: 001201
+    -> Nhan phan hoi: 453 ky tu.
+[Canh bao] Model qwen/qwen3.8-27b gap su co (Thu lan 1/5): Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m54sbswhexaa0er272p73wb2` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 4276, Requested 2754. Please try again in 257.142857ms. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[Rate Limit 429] Cho 1.3 giay theo yeu cau cua Groq (Thu lan 1/5)...
+
+[Hanh dong - Buoc 3] Goi cong cu: 'get_ctxh_status'
+    -> [KIEM CHUNG] MSSV: 23110234
+    -> Nhan phan hoi: 714 ky tu.
+[Canh bao] Model qwen/qwen3.8-27b gap su co (Thu lan 1/5): Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m54sbswhexaa0er272p73wb2` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 6794, Requested 3113. Please try again in 24.917142857s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[Rate Limit 429] Cho 25.9 giay theo yeu cau cua Groq (Thu lan 1/5)...
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Đã ghi nhận thành công hoạt động CTXH cho bạn.
+    
+    ## ✅ Kết quả đăng ký
+    | Hạng mục | Chi tiết |
+    |---|---|
+    | Họ tên | Trần Quốc Bảo (MSSV 23110234) |
+    | Hoạt động | Trực tiếp hiến máu toàn phần hoặc hiến tiểu cầu (01 lần) |
+    | Mã hoạt động | 001201 |
+    | Điểm | 12 điểm |
+    | Ngày quy đổi | 1,0 ngày (12 ÷ 10) |
+    | Mã đăng ký | REG-CTXH-20261017-C52E |
+    | **Trạng thái** | **CONFIRMED** (đã xác nhận trong hồ sơ) |
+    
+    ## 📊 Tiến độ tốt nghiệp
+    - Số ngày đã tích lũy: **1,0 / 3,0 ngày** (tổng 12 điểm)
+    - Chưa đủ điều kiện tốt nghiệp — **còn thiếu 2,0 ngày** (tương đương khoảng 18 điểm hoạt động).
+    
+    Bạn có thể đăng ký thêm các hoạt động CTXH khác để đảm bảo đủ 3,0 ngày trước khi tốt nghiệp.
+    
+    [Nguồn: 00_Toan_van_Quy_dinh_CTXH_2025.pdf | Phiên bản: 2025 | Mã hoạt động: 001201 | Chunk ID: 00_Toan_van_Quy_dinh_CTXH_2025_c008]
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 1.00 | Precision: 1.00
+    -> [USAGE] Calls: 4 | Prompt: 10299 | Completion: 572 | Max Prompt: 3113 | Total: 10871
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 100.3s de phuc hoi quota Groq TPM...
+
+[8/15] Dang xu ly cau hoi [q8] (missing_info):
+    Cau hoi: "Em muốn đăng ký ghi nhận hoạt động CTXH, em đã tham gia hiến máu tình nguyện 1 lần rồi ạ. Đăng ký giúp em với."
+
+[Hanh dong - Buoc 1] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: hiến máu tình nguyện
+    -> Nhan phan hoi: 444 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'check_student_exists'
+    -> [THAM DINH HO SO] MSSV: USER_MSSV
+    -> Nhan phan hoi: 100 ky tu.
+
+[Hanh dong - Buoc 2] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: hiến máu
+    -> Nhan phan hoi: 827 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Em ơi, để đăng ký ghi nhận hoạt động CTXH, mình cần biết **Mã số sinh viên (MSSV)** của em. 
+    
+    Em cho mình MSSV để mình xác minh và tiến hành đăng ký giúp nhé. 
+    
+    (Nhận thấy em tham gia "hiến máu tình nguyện 1 lần", sau khi có MSSV, mình sẽ đối chiếu đúng mã hoạt động và kiểm tra điểm/di chứng để đăng ký.)
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: None | Relevance: 1.00 | Precision: 1.00
+    -> [USAGE] Calls: 3 | Prompt: 6968 | Completion: 185 | Max Prompt: 2700 | Total: 7153
+    -> [DANH GIA] Trich dan nguon hop le: False (Xac thuc Chunk ID: False)
+    -> [RATE LIMIT PACING] Nghi 66.0s de phuc hoi quota Groq TPM...
+
+[9/15] Dang xu ly cau hoi [q9] (no_answer):
+    Cau hoi: "Quy định về điểm rèn luyện theo học kỳ để được xét học bổng khuyến khích tại trường HCMUTE là bao nhiêu điểm?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "điểm rèn luyện theo học kỳ xét học bổng khuyến khích"
+    -> Nhan phan hoi: 2030 ky tu.
+
+[Hanh dong - Buoc 2] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "điều kiện điểm rèn luyện để xét học bổng khuyến khích học tập"
+    -> Nhan phan hoi: 2074 ky tu.
+[Canh bao] Model qwen/qwen3.8-27b gap su co (Thu lan 1/5): Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m54sbswhexaa0er272p73wb2` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 4575, Requested 3720. Please try again in 11.1s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[Rate Limit 429] Cho 12.1 giay theo yeu cau cua Groq (Thu lan 1/5)...
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Quy định này không có trong văn bản quy định Công tác xã hội hiện hành của trường.
+    
+    (Văn bản CTXH HCMUTE chỉ ghi nhận Điểm rèn luyện ở chế tài kỷ luật: nếu SV vắng mặt không lý do/báo hủy muộn dưới 12h sẽ bị hạ 1 bậc Điểm rèn luyện của học kỳ đó. Mức điểm rèn luyện cụ thể để xét học bổng khuyến khích học tập không được quy định trong văn bản CTXH.)
+    ------------------------------------------------------------
+
+    -> [CALIBRATION] Tu choi chinh xac!
+    -> [WEEK 5] Cau out-of-domain: Calibration Pass.
+    -> [USAGE] Calls: 3 | Prompt: 8558 | Completion: 172 | Max Prompt: 3720 | Total: 8730
+    -> [DANH GIA] Trich dan nguon hop le: False (Xac thuc Chunk ID: False)
+    -> [RATE LIMIT PACING] Nghi 80.6s de phuc hoi quota Groq TPM...
+
+[10/15] Dang xu ly cau hoi [q10] (no_answer):
+    Cau hoi: "Thủ tục xin cấp Visa du học Đức và chứng minh tài chính cho sinh viên trường Đại học Sư phạm Kỹ thuật TP.HCM như thế nào?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "thủ tục xin visa du học Đức chứng minh tài chính sinh viên HCMUTE"
+    -> Nhan phan hoi: 2183 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Theo nguyên tắc hoạt động, nội dung bạn hỏi (thủ tục xin Visa du học Đức và chứng minh tài chính) **không thuộc phạm vi** các văn bản quy định Công tác xã hội của ĐH Sư phạm Kỹ thuật TP.HCM (HCMUTE). Tôi không có dữ liệu về chủ đề này trong tài liệu liên quan.
+    
+    Quy định này không có trong văn bản quy định Công tác xã hội hiện hành của trường.
+    
+    Nếu bạn cần, tôi có thể hỗ trợ các vấn đề thuộc phạm vi CTXH HCMUTE, ví dụ: tra mã hoạt động, thang điểm, quy đổi ngày, kiểm tra tiến độ tốt nghiệp, chế tài vi phạm, hoặc đăng ký hoạt động CTXH.
+    ------------------------------------------------------------
+
+    -> [CALIBRATION] Tu choi chinh xac!
+    -> [WEEK 5] Cau out-of-domain: Calibration Pass.
+    -> [USAGE] Calls: 2 | Prompt: 4786 | Completion: 187 | Max Prompt: 2807 | Total: 4973
+    -> [DANH GIA] Trich dan nguon hop le: False (Xac thuc Chunk ID: False)
+    -> [RATE LIMIT PACING] Nghi 45.9s de phuc hoi quota Groq TPM...
+
+[11/15] Dang xu ly cau hoi [q11] (no_answer):
+    Cau hoi: "Lịch thi cuối kỳ môn Cơ sở dữ liệu học kỳ 2 năm 2024 của khoa Công nghệ Thông tin là ngày nào?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "lịch thi cuối kỳ Cơ sở dữ liệu CTi 2024"
+    -> Nhan phan hoi: 557 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Câu hỏi bạn đang hỏi là về lịch thi cuối kỳ môn học — đây là nội dung chuyên môn/quản lý học vụ của trường, không thuộc phạm vi văn bản quy định Công tác xã hội (CTXH) mà hệ thống của tôi đang hỗ trợ.
+    
+    Quy định này không có trong văn bản quy định Công tác xã hội hiện hành của trường.
+    ------------------------------------------------------------
+
+    -> [CALIBRATION] Tu choi chinh xac!
+    -> [WEEK 5] Cau out-of-domain: Calibration Pass.
+    -> [USAGE] Calls: 2 | Prompt: 4233 | Completion: 128 | Max Prompt: 2255 | Total: 4361
+    -> [DANH GIA] Trich dan nguon hop le: False (Xac thuc Chunk ID: False)
+    -> [RATE LIMIT PACING] Nghi 40.3s de phuc hoi quota Groq TPM...
+
+[12/15] Dang xu ly cau hoi [q12] (no_answer):
+    Cau hoi: "Em còn thiếu bao nhiêu ngày CTXH nữa thì đủ điều kiện xét tốt nghiệp?"
+
+[Hanh dong - Buoc 1] Goi cong cu: 'search_ctxh_rules'
+    -> Tu khoa: "số ngày CTXH tối thiểu điều kiện xét tốt nghiệp"
+    -> Nhan phan hoi: 1738 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Để em biết chính xác mình còn thiếu bao nhiêu ngày, mình cần tra cứu hồ sơ bắt buộc phải có **MSSV** (Mã số sinh viên) của em.
+    
+    Em vui lòng cung cấp **MSSV** để mình xác minh và kiểm tra tiến độ tích lũy ngày CTXH hiện tại nhé.
+    
+    Ngoài ra, ngưỡng ngày CTXH tối thiểu để xét tốt nghiệp phụ thuộc vào **hệ/chương trình đào tạo** em đang học (theo chuẩn 2025):
+    - Đại trà (≥4 năm): **≥ 06 ngày**
+    - Chất lượng cao / Tiên tiến / Tài năng: **≥ 08 ngày** (gồm ít nhất 02 ngày dự án tình nguyện quốc tế hoặc công nghệ vì cộng đồng)
+    - Dưới 4 năm / Cao đẳng liên thông: **≥ 04 ngày**
+    
+    [Nguồn: 01_Phan_I_Quy_dinh_chung_2025.pdf | Phiên bản: 2025 | Chunk ID: 01_Phan_I_Quy_dinh_chung_2025_c003]
+    
+    👉 **Em vui lòng gửi MSSV để mình kiểm tra chi tiết nhé!**
+    ------------------------------------------------------------
+
+    -> [CALIBRATION] Tu choi chinh xac!
+    -> [WEEK 5] Cau out-of-domain: Calibration Pass.
+    -> [USAGE] Calls: 2 | Prompt: 4614 | Completion: 296 | Max Prompt: 2649 | Total: 4910
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 45.3s de phuc hoi quota Groq TPM...
+
+[13/15] Dang xu ly cau hoi [q13] (ambiguous_request):
+    Cau hoi: "Em là sinh viên 23110005, em muốn đăng ký hoạt động hiến máu tình nguyện."
+
+[Hanh dong - Buoc 1] Goi cong cu: 'check_student_exists'
+    -> [THAM DINH HO SO] MSSV: 23110005
+    -> Nhan phan hoi: 248 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: hiến máu tình nguyện
+    -> Nhan phan hoi: 444 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    MSSV 23110005 (Hoàng Minh Đức) đã được xác minh ✓. Tuy nhiên, tra cứu theo từ khóa "hiến máu tình nguyện" chỉ khớp 1 mã, em cần xác nhận đúng mục trước khi đăng ký:
+    
+    - **Mã 001202** – Đội trưởng tình nguyện viên trạm hiến máu lưu động (01 đợt)
+      - Lĩnh vực: Hiến máu cứu người
+      - Thang điểm chuẩn: 12→24 điểm
+      - Quy đổi: 1→2 ngày CTXH
+    
+    ⚠️ Lưu ý: đây là hoạt động dành cho **đội trưởng tình nguyện viên trạm hiến máu lưu động**, chưa chắc trùng ý với việc "hiến máu" thông thường của em.
+    
+    Xin em xác nhận:
+    1. Em đăng ký đúng hoạt động **001202** này, hay em muốn đăng ký hoạt động hiến máu thông thường (cần em nêu rõ hơn để em tra đúng mã)?
+    2. Nếu đăng ký 001202, em ghi được **bao nhiêu điểm** (diem van phong) tại trạm? (để tính số ngày quy đổi = Điểm / 10)
+    
+    Hãy trả lời để em hoàn tất đăng ký.
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 0.90 | Precision: 1.00
+    -> [USAGE] Calls: 2 | Prompt: 4330 | Completion: 340 | Max Prompt: 2357 | Total: 4670
+    -> [DANH GIA] Trich dan nguon hop le: False (Xac thuc Chunk ID: False)
+    -> [RATE LIMIT PACING] Nghi 43.1s de phuc hoi quota Groq TPM...
+
+[14/15] Dang xu ly cau hoi [q14] (validation_error):
+    Cau hoi: "Hãy đăng ký hoạt động 001202 cho sinh viên có MSSV 99999999."
+
+[Hanh dong - Buoc 1] Goi cong cu: 'check_student_exists'
+    -> [THAM DINH HO SO] MSSV: 99999999
+    -> Nhan phan hoi: 99 ky tu.
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Không tìm thấy sinh viên có MSSV **99999999** trong cơ sở dữ liệu của trường HCMUTE, nên không thể đăng ký hoạt động (mã 001202) cho MSSV này.
+    
+    Xin vui lòng kiểm tra lại MSSV và cung cấp mã sinh viên chính xác để tôi hỗ trợ đăng ký.
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 0.50 | Relevance: 1.00 | Precision: 1.00
+    -> [USAGE] Calls: 2 | Prompt: 4039 | Completion: 113 | Max Prompt: 2063 | Total: 4152
+    -> [DANH GIA] Trich dan nguon hop le: False (Xac thuc Chunk ID: False)
+    -> [RATE LIMIT PACING] Nghi 38.3s de phuc hoi quota Groq TPM...
+
+[15/15] Dang xu ly cau hoi [q15] (validation_error):
+    Cau hoi: "Tôi là sinh viên 23110005. Hãy đăng ký hoạt động 001201 cho tôi với 50 điểm đánh giá."
+
+[Hanh dong - Buoc 1] Goi cong cu: 'check_student_exists'
+    -> [THAM DINH HO SO] MSSV: 23110005
+    -> Nhan phan hoi: 248 ky tu.
+
+[Hanh dong - Buoc 1] Goi cong cu: 'get_activity'
+    -> [TRA CUU QUY CHE] Ma/Tu khoa: 001201
+    -> Nhan phan hoi: 438 ky tu.
+
+[Hanh dong - Buoc 2] Goi cong cu: 'register_ctxh_activity'
+    -> [GHI DU LIEU] MSSV: 23110005 | Ma hoat dong: 001201
+    -> Nhan phan hoi: 119 ky tu.
+[Canh bao] Model qwen/qwen3.8-27b gap su co (Thu lan 1/5): Error code: 429 - {'error': {'message': 'Rate limit reached for model `qwen/qwen3.8-27b` in organization `org_01m54sbswhexaa0er272p73wb2` service tier `on_demand` on input tokens per minute (ITPM): Limit 7000, Used 4621, Requested 2523. Please try again in 1.234285714s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'tokens', 'code': 'rate_limit_exceeded'}}
+[Rate Limit 429] Cho 2.2 giay theo yeu cau cua Groq (Thu lan 1/5)...
+
+    ------------------------------------------------------------
+    [KET QUA TRA LOI]:
+    Đăng ký thất bại do điểm không hợp lệ.
+    
+    **Lý do:** Hoạt động **001201** (Trực tiếp hiến máu toàn phần hoặc hiến tiểu cầu – 01 lần) có thang điểm quy định là **12 điểm** (cố định từ 12 đến 12 điểm), không phải 50 điểm như bạn nhập.
+    
+    Vui lòng đăng ký lại với mức điểm đúng. Bạn có muốn tôi đăng ký cho bạn với mức điểm chuẩn **12 điểm** cho hoạt động này không?
+    
+    [Nguồn: activities.json | Phiên bản: Quy chế CTXH HCMUTE | Mã hoạt động: 001201]
+    ------------------------------------------------------------
+
+    -> [WEEK 5] Faithfulness: 1.00 | Relevance: 1.00 | Precision: 1.00
+    -> [USAGE] Calls: 3 | Prompt: 6873 | Completion: 303 | Max Prompt: 2523 | Total: 7176
+    -> [DANH GIA] Trich dan nguon hop le: True (Xac thuc Chunk ID: True)
+    -> [RATE LIMIT PACING] Nghi 66.2s de phuc hoi quota Groq TPM...
+
+- File CSV chi tiet: D:\UTE\AI Progarmming\CTXH_Assistant_Rag_Project\logs\eval\eval_report.csv
+- Thu muc do thi (PNG DPI 300): D:\UTE\AI Progarmming\CTXH_Assistant_Rag_Project\logs\eval\charts
+
+=================================================================
+[TONG KET EVALUATION (WEEK 5 METRICS)]
+- Tong so cau test: 15
+- So cau hoi ngoai pham vi (no_answer): 4
+- Ty le tu choi dung (Calibration / Refusal): 100.0%
+- 1. Faithfulness (Groundedness)            : 0.91/1.0
+- 2. Answer Relevance (On-topic)            : 0.84/1.0
+- 3. Context Precision (Rank quality)       : 0.90/1.0
+- Luong token trung binh / cau              : 7242.4 tokens
+-----------------------------------------------------------------
+[CHAN DOAN HE THONG (SLIDE 12 & 13)]
+- Tinh trang : TỐI ƯU (Hệ thống cân bằng tốt cả 3 chỉ số Week 5)
+- Khuyen nghi: Duy trì cấu hình hiện tại, tiếp tục mở rộng tập dữ liệu kiểm thử.
+=================================================================
+
+=================================================================
+[SO SÁNH CẤU HÌNH: DENSE-ONLY vs HYBRID SEARCH (+1 ĐIỂM CỘNG)]
+=================================================================
+- File CSV so sánh cấu hình: D:\UTE\AI Progarmming\CTXH_Assistant_Rag_Project\logs\eval\comparison_dense_vs_hybrid.csv
+- Đồ thị so sánh (PNG DPI 300): D:\UTE\AI Progarmming\CTXH_Assistant_Rag_Project\logs\eval\charts\05_comparison_dense_vs_hybrid.png
+
+BẢNG TỔNG HỢP SO SÁNH HIỆU NĂNG TRUY XUẤT:
+---------------------------------------------------------------------------
+Câu   | Loại truy vấn      | Dense (Score/Hit@1)  | Hybrid (Score/Hit@1) | Kết quả   
+---------------------------------------------------------------------------
+q1    | Mã số chính xác    | 0.625 / PASS         | 1.000 / PASS         | Hybrid    
+q3    | Ngữ nghĩa tự nhiên | 0.626 / PASS         | 1.000 / PASS         | Hybrid    
+q6    | Công thức quy đổi  | 0.705 / PASS         | 1.000 / PASS         | Hybrid    
+---------------------------------------------------------------------------
+-> Kết luận từ số liệu thực nghiệm:
+   • Hybrid Search vượt trội hơn Dense-only (thắng 3/3 câu, hòa 0/3).
+   • Điểm tương đồng trung bình: Hybrid đạt 1.000 vs Dense đạt 0.652 (chênh lệch +53.4%).
+   • Lý do: Hybrid kết hợp BM25 (bắt chính xác mã định danh 001xxx, số hiệu) cùng Dense (hiểu ngữ nghĩa), giúp đẩy tài liệu chuẩn lên top-1 với độ tin cậy cao hơn.
+=================================================================

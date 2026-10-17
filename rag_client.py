@@ -16,11 +16,18 @@ import sys
 import re   
 import time
 from pathlib import Path
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+# Tat toan bo log HTTP request on ao tu httpx va groq
+for _logger_name in ("httpx", "httpcore", "groq", "openai"):
+    _log = logging.getLogger(_logger_name)
+    _log.setLevel(logging.WARNING)
+    _log.propagate = False
 from src.evaluation import (
     FaithfulnessEvaluator,
     check_answer_relevance,

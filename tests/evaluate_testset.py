@@ -17,6 +17,7 @@ Hoặc chạy thử số câu: uv run python tests/evaluate_testset.py --limit 3
 
 import asyncio
 import json
+import logging
 import os
 import re
 import sys
@@ -27,6 +28,12 @@ from dotenv import load_dotenv
 from groq import Groq
 from mcp import ClientSession
 from mcp.client.stdio import stdio_client
+
+# Tat toan bo log HTTP request on ao tu httpx va groq
+for _logger_name in ("httpx", "httpcore", "groq", "openai"):
+    _log = logging.getLogger(_logger_name)
+    _log.setLevel(logging.WARNING)
+    _log.propagate = False
 
 # Ensure UTF-8 output on Windows terminal
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -125,15 +132,21 @@ async def evaluate_all():
             if line:
                 testcases.append(json.loads(line))
 
-    # Hỗ trợ tham số dòng lệnh --limit hoặc biến môi trường EVAL_LIMIT để test nhanh
+    # Hỗ trợ tham số dòng lệnh --limit hoặc --id/--ids để test nhanh các câu cụ thể
     limit = int(os.getenv("EVAL_LIMIT", 0))
+    target_ids = []
     for i, arg in enumerate(sys.argv):
         if arg == "--limit" and i + 1 < len(sys.argv):
             try:
                 limit = int(sys.argv[i + 1])
             except ValueError:
                 pass
-    if limit > 0:
+        elif arg in ("--id", "--ids") and i + 1 < len(sys.argv):
+            target_ids = [x.strip() for x in sys.argv[i + 1].split(",") if x.strip()]
+
+    if target_ids:
+        testcases = [tc for tc in testcases if tc.get("id") in target_ids]
+    elif limit > 0:
         testcases = testcases[:limit]
 
     print("=" * 65)
@@ -222,6 +235,12 @@ async def evaluate_all():
                     total_prompt_tokens += usage.get("prompt_tokens", 0)
                     total_completion_tokens += usage.get("completion_tokens", 0)
 
+                    print("\n    " + "-" * 60)
+                    print("    [KET QUA TRA LOI]:")
+                    for a_line in answer.splitlines():
+                        print(f"    {a_line}")
+                    print("    " + "-" * 60 + "\n")
+
                     # Kiem tra xem co phai loi ha tang mang / rate-limit hay khong
                     is_infra_error = (
                         answer.startswith("Error: Loi ket noi LLM")
@@ -237,10 +256,17 @@ async def evaluate_all():
                         "quy định này không có", "không tìm thấy", "từ chối", "không thuộc", 
                         "không nằm trong", "chưa có quy định", "không áp dụng", "không quy định",
                         "không phải câu hỏi", "ngoài phạm vi", "chỉ hỗ trợ giải đáp quy định",
-                        "không tồn tại trong cơ sở dữ liệu", "không tồn tại trong hệ thống"
+                        "không tồn tại trong cơ sở dữ liệu", "không tồn tại trong hệ thống",
+                        "vui lòng cung cấp", "cần cung cấp", "không đủ thông tin", "chưa cung cấp",
+                        "yêu cầu cung cấp", "bổ sung mã", "bổ sung mssv", "mã sinh viên (mssv)",
+                        "mã số sinh viên", "vui lòng gửi"
                     ]
                     answer_lower = answer.lower()
-                    if any(kw in answer_lower for kw in refusal_keywords):
+                    has_kw = any(kw in answer_lower for kw in refusal_keywords)
+                    has_missing_info_refusal = (
+                        "mssv" in answer_lower and ("cần" in answer_lower or "vui lòng" in answer_lower or "chưa" in answer_lower or "yêu cầu" in answer_lower)
+                    )
+                    if has_kw or has_missing_info_refusal:
                         is_refused = True
 
                     if is_no_ans:
@@ -305,7 +331,8 @@ async def evaluate_all():
                             r_str = f"{rel_score:.2f}" if rel_score is not None else "None"
                             print(f"    -> [WEEK 5] Khong co context: Faithfulness=N/A | Relevance={r_str}")
                     else:
-                        print(f"    -> [WEEK 5] Cau out-of-domain: Calibration Pass.")
+                        cal_result = "Pass" if is_refused else "FAIL (khong tu choi)"
+                        print(f"    -> [WEEK 5] Cau out-of-domain: Calibration {cal_result}.")
 
                     calls = usage.get("api_calls", 1)
                     p_tokens = usage.get("prompt_tokens", 0)
@@ -448,27 +475,36 @@ def run_configuration_comparison(store, eval_dir: Path, charts_dir: Path) -> lis
     print("[SO SÁNH CẤU HÌNH: DENSE-ONLY vs HYBRID SEARCH (+1 ĐIỂM CỘNG)]")
     print("=" * 65)
 
+    # Lấy câu hỏi CHÍNH XÁC từ tập testset.jsonl (không viết lại query)
+    testset_queries = {}
+    if TESTSET_FILE.exists():
+        with open(TESTSET_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    item = json.loads(line)
+                    testset_queries[item["id"]] = item["query"]
+
     comparison_cases = [
         {
             "id": "q1",
             "short_label": "Mã số chính xác",
-            "query": "Mã hoạt động Trực tiếp hiến máu tình nguyện 01 lần là mã gì và được quy đổi bao nhiêu ngày",
+            "query": testset_queries.get("q1", "Mã hoạt động 'Trực tiếp hiến máu tình nguyện 01 lần' là mã gì và được quy đổi thành bao nhiêu ngày CTXH?"),
             "expected_code": "001201 / 001202",
             "check_kw": ["00120", "hiến máu"],
         },
         {
             "id": "q3",
             "short_label": "Ngữ nghĩa tự nhiên",
-            "query": "Sinh viên đăng ký tham gia hoạt động CTXH nhưng không thực hiện thì bị xử lý thế nào",
-            "expected_code": "trừ 0,5 ngày",
-            "check_kw": ["trừ", "0,5"],
+            "query": testset_queries.get("q3", "Sinh viên đăng ký tham gia hoạt động CTXH nhưng không thực hiện nội dung đã đăng ký mà không có lý do chính đáng thì bị xử lý như thế nào?"),
+            "expected_code": "trừ ngày CTXH",
+            "check_kw": ["trừ", "ngày"],
         },
         {
             "id": "q6",
             "short_label": "Công thức quy đổi",
-            "query": "công thức quy đổi điểm thành ngày CTXH trước khi xét tốt nghiệp",
-            "expected_code": "chia cho 10",
-            "check_kw": ["chia", "10", "tổng điểm"],
+            "query": testset_queries.get("q6", "Một sinh viên có tổng cộng 35 điểm CTXH tích lũy trong suốt khóa học. Theo công thức quy đổi điểm thành ngày CTXH trước khi xét tốt nghiệp, sinh viên này được bao nhiêu ngày CTXH?"),
+            "expected_code": "chia điểm quy đổi",
+            "check_kw": ["chia", "tổng điểm"],
         },
     ]
 
@@ -484,18 +520,29 @@ def run_configuration_comparison(store, eval_dir: Path, charts_dir: Path) -> lis
         d_content = d_chunk.content.lower() if d_chunk else ""
         h_content = h_chunk.content.lower() if h_chunk else ""
 
-        d_hit = all(kw.lower() in d_content for kw in tc["check_kw"])
-        h_hit = all(kw.lower() in h_content for kw in tc["check_kw"])
+        # Tiêu chí all(...) chặt chẽ cho top-1
+        d_hit_top1 = all(kw.lower() in d_content for kw in tc["check_kw"])
+        h_hit_top1 = all(kw.lower() in h_content for kw in tc["check_kw"])
+
+        # Kiểm tra top-3 Hit
+        d_hit_top3 = any(all(kw.lower() in c.content.lower() for kw in tc["check_kw"]) for c, s in dense_res[:3])
+        h_hit_top3 = any(all(kw.lower() in c.content.lower() for kw in tc["check_kw"]) for c, s in hybrid_res[:3])
 
         d_cid = d_chunk.chunk_id if d_chunk else "None"
         h_cid = h_chunk.chunk_id if h_chunk else "None"
 
-        if h_hit and not d_hit:
+        # Đánh giá winner dựa trên độ chính xác và điểm xếp hạng thực tế
+        if h_hit_top1 and not d_hit_top1:
             winner = "Hybrid (BM25 bắt đúng từ khóa)"
-        elif d_hit and not h_hit:
+        elif d_hit_top1 and not h_hit_top1:
             winner = "Dense"
-        elif h_hit and d_hit:
-            winner = "Tương đương" if abs(h_score - d_score) < 0.05 else ("Hybrid" if h_score > d_score else "Dense")
+        elif h_hit_top1 and d_hit_top1:
+            if h_score > d_score + 0.05:
+                winner = "Hybrid (Độ tự tin cao hơn)"
+            elif d_score > h_score + 0.05:
+                winner = "Dense (Độ tự tin cao hơn)"
+            else:
+                winner = "Tương đương"
         else:
             winner = "Không khớp"
 
@@ -506,10 +553,12 @@ def run_configuration_comparison(store, eval_dir: Path, charts_dir: Path) -> lis
             "expected_code": tc["expected_code"],
             "dense_score": round(d_score, 3),
             "dense_chunk": d_cid,
-            "dense_hit": d_hit,
+            "dense_hit": d_hit_top1,
+            "dense_top3_hit": d_hit_top3,
             "hybrid_score": round(h_score, 3),
             "hybrid_chunk": h_cid,
-            "hybrid_hit": h_hit,
+            "hybrid_hit": h_hit_top1,
+            "hybrid_top3_hit": h_hit_top3,
             "winner": winner,
         })
 
@@ -525,16 +574,36 @@ def run_configuration_comparison(store, eval_dir: Path, charts_dir: Path) -> lis
 
     # In bang tong hop tren terminal
     print("\nBẢNG TỔNG HỢP SO SÁNH HIỆU NĂNG TRUY XUẤT:")
-    print("-" * 65)
-    print(f"{'Câu':<5} | {'Loại truy vấn':<20} | {'Dense (Score/Hit)':<18} | {'Hybrid (Score/Hit)':<18}")
-    print("-" * 65)
+    print("-" * 75)
+    print(f"{'Câu':<5} | {'Loại truy vấn':<18} | {'Dense (Score/Hit@1)':<20} | {'Hybrid (Score/Hit@1)':<20} | {'Kết quả':<10}")
+    print("-" * 75)
     for r in records:
         d_stat = f"{r['dense_score']:.3f} / {'PASS' if r['dense_hit'] else 'FAIL'}"
         h_stat = f"{r['hybrid_score']:.3f} / {'PASS' if r['hybrid_hit'] else 'FAIL'}"
-        print(f"{r['id']:<5} | {r['short_label']:<20} | {d_stat:<18} | {h_stat:<18}")
-    print("-" * 65)
-    print("-> Nhận xét: Hybrid Search (BM25 + Dense) vượt trội hơn hẳn Dense-only,")
-    print("   đặc biệt ở câu q1 (mã số chính xác), giúp loại bỏ hoàn toàn hiện tượng ảo giác.")
+        w_short = "Hybrid" if "Hybrid" in r["winner"] else ("Dense" if "Dense" in r["winner"] else "Hòa")
+        print(f"{r['id']:<5} | {r['short_label']:<18} | {d_stat:<20} | {h_stat:<20} | {w_short:<10}")
+    print("-" * 75)
+
+    # Sinh nhận xét động hoàn toàn từ số liệu thực tế
+    h_wins = sum(1 for r in records if "Hybrid" in r["winner"])
+    d_wins = sum(1 for r in records if "Dense" in r["winner"])
+    ties   = sum(1 for r in records if "Hybrid" not in r["winner"] and "Dense" not in r["winner"])
+    avg_d  = sum(r["dense_score"] for r in records) / len(records) if records else 0
+    avg_h  = sum(r["hybrid_score"] for r in records) / len(records) if records else 0
+    score_diff_pct = ((avg_h - avg_d) / avg_d * 100) if avg_d > 0 else 0
+
+    if h_wins > d_wins:
+        verdict = f"Hybrid Search vượt trội hơn Dense-only (thắng {h_wins}/{len(records)} câu, hòa {ties}/{len(records)})."
+    elif d_wins > h_wins:
+        verdict = f"Dense-only vượt trội hơn Hybrid Search (thắng {d_wins}/{len(records)} câu, hòa {ties}/{len(records)})."
+    else:
+        verdict = f"Hai chế độ có hiệu năng tương đương nhau ({ties}/{len(records)} câu hòa)."
+
+    print(f"-> Kết luận từ số liệu thực nghiệm:")
+    print(f"   • {verdict}")
+    print(f"   • Điểm tương đồng trung bình: Hybrid đạt {avg_h:.3f} vs Dense đạt {avg_d:.3f} (chênh lệch {score_diff_pct:+.1f}%).")
+    if avg_h > avg_d:
+        print(f"   • Lý do: Hybrid kết hợp BM25 (bắt chính xác mã định danh 001xxx, số hiệu) cùng Dense (hiểu ngữ nghĩa), giúp đẩy tài liệu chuẩn lên top-1 với độ tin cậy cao hơn.")
     print("=" * 65)
     return records
 

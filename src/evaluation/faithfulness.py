@@ -13,10 +13,17 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional, Any
 import json
+import logging
 import os
 import re
 from dotenv import load_dotenv
 from groq import Groq
+
+# Tat toan bo log HTTP request on ao tu httpx va groq
+for _logger_name in ("httpx", "httpcore", "groq", "openai"):
+    _log = logging.getLogger(_logger_name)
+    _log.setLevel(logging.WARNING)
+    _log.propagate = False
 
 load_dotenv()
 DEFAULT_MODEL = "qwen/qwen3.8-27b"
