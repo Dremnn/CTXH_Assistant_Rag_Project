@@ -154,8 +154,14 @@ async def run_agent_loop(
     verified_mssv = set()
 
     for step in range(MAX_STEPS):
-        # Tu dong quyet dinh tool_choice: 'auto' cac buoc dau de cho phep tu choi ngay; 'none' o buoc cuoi de ep tong hop
-        tool_choice = "none" if step == MAX_STEPS - 1 else "auto"
+        # Strict Grounding: Buoc dau bat buoc goi tool de tra cuu tai lieu quy che (tranh hien tuong model doan mo / tu choi ao)
+        # Luot cuoi cung (step == MAX_STEPS - 1): Ep tool_choice="none" de LLM buoc phai tong hop cau tra loi cuoi cung
+        if step == 0:
+            tool_choice = "required"
+        elif step == MAX_STEPS - 1:
+            tool_choice = "none"
+        else:
+            tool_choice = "auto"
 
         try:
             response, usage = call_groq_with_retry(
