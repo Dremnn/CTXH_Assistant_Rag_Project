@@ -55,6 +55,10 @@ class DocumentChunk:
         return cls(**data)
 
 
+# ==========================================
+# DOMAIN MODELS & TOOL SCHEMAS FOR CTXH (T5)
+# ==========================================
+
 @dataclass
 class CTXHRegistration:
     """
@@ -96,6 +100,7 @@ class SearchCTXHRulesInput:
     query: str
     top_k: int = 4
     mode: Literal["hybrid", "vector", "bm25"] = "hybrid"
+    year: Optional[str] = None
 
 
 @dataclass
