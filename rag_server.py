@@ -605,35 +605,6 @@ def _parse_ctxh_rules_from_file(fpath: Path) -> dict:
     }
 
 
-
-def _find_ctxh_source_file() -> Path | None:
-    """Tim kiem file Excel luu hoat dong da tham gia CTXH cua sinh vien trong thu muc data/."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    # 1. Kiem tra cac ten file Excel uu tien
-    for fname in CTXH_STUDENT_ACTIVITY_FILENAMES:
-        p = DATA_DIR / fname
-        if p.exists() and p.is_file():
-            return p
-
-    # 2. Quet cac file Excel khac trong data/ co chua tu khoa hoat dong sinh vien
-    for p in sorted(DATA_DIR.glob("*.xlsx")):
-        if p.name.startswith("~$") or p.name.startswith("."):
-            continue
-        p_name = p.name.lower()
-        if p_name in {"students.xlsx", "students_ctxh.xlsx", "activities.xlsx"}:
-            continue
-        if any(kw in p_name for kw in ["activity", "activities", "hoat_dong", "tham_gia", "sinh_vien"]):
-            return p
-
-    for p in sorted(DATA_DIR.glob("*.xlsm")):
-        if p.name.startswith("~$") or p.name.startswith("."):
-            continue
-        p_name = p.name.lower()
-        if any(kw in p_name for kw in ["activity", "activities", "hoat_dong", "tham_gia", "sinh_vien"]):
-            return p
-
-    return None
-
 def sync_ctxh_rules_from_file() -> dict:
     """
     Boc tach du lieu hoat dong CTXH va cach tinh diem tu cac file Excel (.xlsx), Word (.docx), PDF, Text (.txt) trong data/.
@@ -716,7 +687,6 @@ def sync_ctxh_rules_from_file() -> dict:
         "total_activities": len(activities_list),
         "target_file": "activities.json"
     }
-<<<<<<< HEAD
 
 
 def _find_ctxh_source_file() -> Path | None:
@@ -812,18 +782,6 @@ def _normalize_ctxh_record_keys(raw_row: dict) -> dict:
                 break
 
     return normalized
-=======
-    
-    
-def _load_students() -> list[dict]:
-    if not STUDENTS_DB_PATH.exists():
-        return []
-    try:
-        with open(STUDENTS_DB_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
->>>>>>> 2b7f240bd14f79c798e8dc519d9e22923b9153d9
 
 
 def _parse_ctxh_rows_from_file(fpath: Path) -> list[dict]:
@@ -879,15 +837,9 @@ def _parse_ctxh_rows_from_file(fpath: Path) -> list[dict]:
         except Exception as e:
             sys.stderr.write(f"[sync_ctxh] Loi doc csv {fpath.name}: {e}\n")
 
-<<<<<<< HEAD
     return rows
 
 
-=======
-    return rows   
-    
-    
->>>>>>> 2b7f240bd14f79c798e8dc519d9e22923b9153d9
 def sync_ctxh_from_file() -> dict:
     """
     Tim kiem file Excel luu hoat dong da tham gia CTXH cua sinh vien trong data/.
